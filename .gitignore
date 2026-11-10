@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# local state and secrets
+.env
+.env.*
+!.env.example
+.local/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.pem
+*.key
+
+# test output
+playwright-report/
+test-results/
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store
+*.log
