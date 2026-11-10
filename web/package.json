@@ -1,0 +1,10 @@
+{
+  "name": "@quaymaster/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo \"web: placeholder (UI is built in a later phase)\"",
+    "typecheck": "echo \"web: placeholder\""
+  }
+}

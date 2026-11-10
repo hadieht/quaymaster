@@ -1,0 +1,27 @@
+{
+  "name": "quaymaster",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Docker management and maintenance dashboard",
+  "license": "MIT",
+  "engines": { "node": ">=22" },
+  "workspaces": ["shared", "server", "web"],
+  "scripts": {
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w web",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "npm run test -w server",
+    "test:unit": "npm run test:unit -w server",
+    "test:integration": "npm run test:integration -w server",
+    "dev": "npm run dev -w server"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0"
+  }
+}
