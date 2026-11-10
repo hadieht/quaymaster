@@ -1,0 +1,56 @@
+# Multi-service fixture: depends_on with healthchecks, a named volume, a labelled network.
+# Everything is named qmtest-* and labelled quaymaster.test=true. Uses only the local alpine image.
+name: qmtest-multi
+
+x-test-label: &test-label
+  quaymaster.test: "true"
+
+x-base: &base
+  image: alpine:latest
+  pull_policy: never
+  init: true
+  stop_grace_period: 2s
+  labels: *test-label
+
+services:
+  db:
+    <<: *base
+    command: ["sh", "-c", "touch /tmp/ready; exec sleep 3600"]
+    volumes:
+      - dbdata:/data
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
+      start_period: 1s
+
+  app:
+    <<: *base
+    command: ["sh", "-c", "touch /tmp/ready; exec sleep 3600"]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 5
+      start_period: 1s
+
+  worker:
+    <<: *base
+    command: ["sh", "-c", "echo worker started; exec sleep 3600"]
+    depends_on:
+      app:
+        condition: service_started
+
+volumes:
+  dbdata:
+    name: qmtest-multi_dbdata
+    labels: *test-label
+
+networks:
+  default:
+    name: qmtest-multi_default
+    labels: *test-label

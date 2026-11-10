@@ -87,6 +87,8 @@ export interface ContainerSummary {
   /** Why mutations on this container are refused right now (null = allowed). */
   protectedReason: string | null;
   mutable: boolean;
+  /** `standalone` for containers without Compose labels; otherwise the level of their project. */
+  capability?: CapabilityLevel;
 }
 
 export type ContainerAction =

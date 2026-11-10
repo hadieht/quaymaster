@@ -188,7 +188,7 @@ export class EventWatcher extends EventEmitter {
       const stream = (await this.d.docker.getEvents({
         since: this.lastSeenSec - 1,
         filters: JSON.stringify({ type: EVENT_TYPES }),
-      } as never)) as NodeJS.ReadableStream;
+      } as never)) as unknown as NodeJS.ReadableStream;
       this.stream = stream;
       this.connected = true;
       this.attempt = 0;

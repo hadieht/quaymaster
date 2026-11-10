@@ -145,10 +145,14 @@ export class Guard {
     if (r) throw new AppError(409, r.code, r.message);
   }
 
-  projectRefusal(project: string, refs?: ProjectRefs): { code: 'read_only' | 'out_of_scope' | 'self_protected'; message: string } | null {
+  projectRefusal(
+    project: string,
+    refs?: ProjectRefs,
+    opts: { perService?: boolean } = {},
+  ): { code: 'read_only' | 'out_of_scope' | 'self_protected'; message: string } | null {
     const ro = this.readOnlyReason;
     if (ro) return { code: 'read_only', message: `Read-only mode: ${ro}` };
-    const prot = this.projectProtectedReason(project);
+    const prot = opts.perService ? null : this.projectProtectedReason(project);
     if (prot) return { code: 'self_protected', message: `Refused: ${prot}` };
     if (!this.inScope(project)) {
       return { code: 'out_of_scope', message: `Refused: project "${project}" is outside QM_MANAGED_SCOPE` };
@@ -172,8 +176,8 @@ export class Guard {
     return null;
   }
 
-  assertProject(project: string, refs?: ProjectRefs): void {
-    const r = this.projectRefusal(project, refs);
+  assertProject(project: string, refs?: ProjectRefs, opts: { perService?: boolean } = {}): void {
+    const r = this.projectRefusal(project, refs, opts);
     if (r) throw new AppError(409, r.code, r.message);
   }
 

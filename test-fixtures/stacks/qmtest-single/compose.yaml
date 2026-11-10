@@ -1,0 +1,18 @@
+# Single-service fixture.
+name: qmtest-single
+
+services:
+  solo:
+    image: alpine:latest
+    pull_policy: never
+    init: true
+    stop_grace_period: 2s
+    command: ["sh", "-c", "echo solo started; exec sleep 3600"]
+    labels:
+      quaymaster.test: "true"
+
+networks:
+  default:
+    name: qmtest-single_default
+    labels:
+      quaymaster.test: "true"

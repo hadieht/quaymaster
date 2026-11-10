@@ -1,0 +1,44 @@
+# Redaction fixture (RT-04): carries a fake secret in every place secrets leak.
+# All values are throw-away strings starting with "fx-"; the test suite asserts none of them
+# appears in any API response, SSE frame, database file or log line.
+name: qmtest-secrets
+
+x-creds:
+  api_key: fx-ext-secret-9a1
+
+services:
+  leaky:
+    image: alpine:latest
+    pull_policy: never
+    init: true
+    stop_grace_period: 2s
+    command:
+      - sh
+      - -c
+      - 'echo "starting with password fx-env-password-7c1 and token fx-env-token-4d2"; exec sleep 3600'
+    environment:
+      DB_PASSWORD: fx-env-password-7c1
+      API_TOKEN: fx-env-token-4d2
+      DATABASE_URL: postgres://admin:fx-url-pass-3b8@db:5432/app?sslmode=disable&password=fx-query-pass-5e6
+      MODE: production
+    labels:
+      quaymaster.test: "true"
+      app.secret: fx-label-secret-2f4
+    healthcheck:
+      test: ["CMD-SHELL", "echo ok --password=fx-hc-secret-8a3 > /dev/null"]
+      interval: 3s
+      timeout: 2s
+      retries: 3
+    configs:
+      - source: inline_cfg
+        target: /etc/inline.cfg
+
+configs:
+  inline_cfg:
+    content: "api_key: fx-config-content-6g7"
+
+networks:
+  default:
+    name: qmtest-secrets_default
+    labels:
+      quaymaster.test: "true"
