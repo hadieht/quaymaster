@@ -352,3 +352,72 @@ toasts for results, empty and error states for every view, keyboard-accessible.
 6. **Documentation** — README, install/config/backup/upgrade guides,
    SECURITY, CONTRIBUTING, CHANGELOG.
 7. **Publish** — secret scan, repository creation, push.
+
+---
+
+## 13. Binding amendments (red-team review 01)
+
+`docs/reviews/01-architecture-redteam.md` was reviewed and **accepted**. Every MUST-FIX (RT-01 … RT-15) and
+SHOULD-FIX (RT-16 … RT-30) in it is part of this specification, with the recommended change as written there.
+Where that review conflicts with sections 1–12 above, **the review wins**. The most consequential changes:
+
+1. **An update changes only the image (RT-01).** Before any Compose mutation that recreates a service, the
+   per-service config hash (`docker compose config --hash`) is compared with the running container's
+   `com.docker.compose.config-hash`. Mismatch → automatic runs abort before pulling (`blocked_drift`); manual
+   runs need a separate, explicit "apply drift" confirmation showing a redacted diff. Unset-variable warnings
+   from Compose are errors. Compose is always invoked with explicit `--project-name`, `--project-directory`
+   and `--file` in recorded order and a fixed, documented child environment.
+2. **Labels are untrusted (RT-02).** `QM_STACK_PATHS` is mandatory in both deployment modes and is the only
+   allow-list for file-level operations (realpath-checked; nothing under the Docker root; includes `env_file`,
+   `secrets`/`configs` files and `include`). Conflicting or out-of-root labels → `limited`.
+3. **Read-only mode and scope are enforced in the transport (RT-03)**: an allow-list of Engine API
+   method/path pairs and Compose subcommands, not per-route checks. Actions resolve to the full ID, check the
+   inspected object, and act by ID. Scope is defined per resource type, including everything an in-scope
+   project's config references, and it filters cleanup candidates.
+4. **Redaction is universal (RT-04)**: every object leaving the process (API, SSE, persisted events and
+   operation output, notifications, logs) is walked at every depth; known secret values are scrubbed from
+   free text; events carry an allow-listed attribute set; notification URLs are secrets as a whole.
+5. **Self-protection fails closed (RT-05)** and covers the own project, networks, volumes and `QM_PROTECTED`.
+6. **Workflow order (RT-06, supersedes 7.5):** Preflight → Validate (+hash gate) → Check → Recovery point →
+   Pull → Impact → Deploy → Health → Confirm/rollback → Record. The rollback image ID comes from the running
+   container, never from the tag. Always `--no-build --pull never`. Built and digest-pinned services are not
+   updatable. After deploy and after rollback the running image ID is asserted.
+7. **Pulls do not move tags (RT-07).** Images are pulled by digest and held under a `quaymaster-staged/…` tag;
+   the user-visible tag moves only inside the deploy step. Impact lists every container on the host that
+   references the same tag.
+8. **Approvals are bound to a plan hash (RT-08)**; a changed plan → `approval_stale`, never executed.
+9. **Scheduler (RT-09):** unique `(schedule, occurrence)` rows; an occurrence that already has a run is never
+   started again automatically; DST and midnight semantics as specified in the review; health checks, rollback
+   and recording always finish regardless of the window.
+10. **Health and rollback defaults (RT-10):** effective timeout respects the healthcheck's own timings;
+    `auto_rollback` defaults to **false for services with writable persistent mounts** (stop, leave as is,
+    alert) and true for stateless services; one-shot services succeed on exit 0; HTTP probes must pass against
+    the current version before they can gate a rollback.
+11. **Namespace sharing (RT-11):** `network_mode`/`pid`/`ipc` `service:`/`container:` and `volumes_from` are
+    dependency edges; recreating a provider recreates its dependents in the same step.
+12. **Standalone containers (RT-12):** clone by diffing against the old image's config, re-attach every mount
+    including anonymous volumes, reconnect all networks, create-then-swap with restore on failure.
+    Standalone updates are **never automatic** in v1. Compose-managed containers are only ever recreated
+    through Compose.
+13. **Disk (RT-13):** free space is measured on the Docker root (mounted read-only in container mode via
+    `QM_DOCKER_ROOT_MOUNT`); pull/update preflight fails closed without it.
+14. **Crash and conflict handling (RT-14):** write-ahead intents, startup reconciliation with a critical
+    notification for any service left down, graceful shutdown, and abort-without-rollback when another tool
+    changes the run's containers.
+15. **SSE (RT-15):** streams are bound to sessions, re-validated, limited and back-pressured.
+
+Decisions on points the review left open:
+
+- **RT-30:** container log access is a separate permission, **off for the viewer role by default**.
+- **RT-40:** `QM_STACK_PATHS` is scanned read-only (bounded depth and file count) so projects that are down
+  remain visible. Replicated services (`container-number` > 1) are supported in views; update runs treat a
+  service's replicas as one unit and say so.
+- **RT-32:** the image store is detected; on a store Quaymaster has not been tested on, rollback-based
+  automation is refused with an explanation rather than attempted.
+- **RT-38:** documentation states plainly: do not expose Quaymaster to the internet; TOTP is on the roadmap.
+- **RT-39:** known auto-updaters running on the host produce a warning banner.
+- **RT-42:** a targeted red-team review of the executor/rollback state machine happens directly after
+  phase 2, before the UI is built.
+- Remaining NOTE items (RT-31, RT-33 … RT-37, RT-41) are accepted as written.
+
+Implementers record how each finding was addressed in `docs/DECISIONS.md`.
