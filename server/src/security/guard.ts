@@ -204,19 +204,30 @@ export class Guard {
 // Mutation permits (transport-level enforcement)
 // ---------------------------------------------------------------------------------------------
 
-export interface MutationPermit {
+export interface ContainerPermit {
   /** Full 64-hex container ID the Engine call may touch. */
   containerId: string;
   action: ContainerAction;
 }
 
+/** Narrow authority for the non-lifecycle Engine mutations the update workflow needs (RT-03). */
+export type EnginePermit =
+  | { kind: 'image_pull'; repo: string; tag: string }
+  | { kind: 'image_tag'; imageId: string; repo: string; tag: string }
+  | { kind: 'image_remove'; name: string }
+  | { kind: 'container_create'; name: string }
+  | { kind: 'container_rename'; containerId: string; newName: string }
+  | { kind: 'network_connect' | 'network_disconnect'; network: string; containerId: string };
+
+export type MutationPermit = ContainerPermit | EnginePermit;
+
 export const permitStore = new AsyncLocalStorage<MutationPermit>();
 
 export const FULL_ID_RE = /^[0-9a-f]{64}$/;
 
-/** Runs `fn` with the authority to perform `permit.action` on exactly `permit.containerId`. */
+/** Runs `fn` with the authority to perform exactly the mutation described by `permit`. */
 export function withPermit<T>(permit: MutationPermit, fn: () => Promise<T>): Promise<T> {
-  if (!FULL_ID_RE.test(permit.containerId)) {
+  if ('containerId' in permit && !FULL_ID_RE.test(permit.containerId)) {
     return Promise.reject(new AppError(500, 'internal', 'Permit requires a full container ID'));
   }
   return permitStore.run(permit, fn);
@@ -226,11 +237,37 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 
 const CONTAINER_POST = /^\/containers\/([0-9a-f]{64})\/(start|stop|restart|kill|pause|unpause)$/;
 const CONTAINER_DELETE = /^\/containers\/([0-9a-f]{64})$/;
+const CONTAINER_RENAME = /^\/containers\/([0-9a-f]{64})\/rename$/;
+const NETWORK_ATTACH = /^\/networks\/([^/]+)\/(connect|disconnect)$/;
+const IMAGE_TAG = /^\/images\/(.+)\/tag$/;
+const IMAGE_DELETE = /^\/images\/(.+)$/;
+
+function decode(s: string): string {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return s;
+  }
+}
+
+function denyPermit(m: string, pathOnly: string): never {
+  throw new AppError(
+    403,
+    'internal',
+    `Engine mutation ${m} ${pathOnly} was not authorised by the service layer`,
+  );
+}
+
+function notAllowListed(m: string, pathOnly: string): never {
+  throw new AppError(403, 'unsupported', `Engine call ${m} ${pathOnly} is not on the allow-list`);
+}
 
 /**
  * Decides whether an Engine API request may leave the process. Pure function: easy to test.
  * Reads (GET/HEAD) always pass; mutations need read-write mode, a matching permit and an
- * allow-listed (method, path) pair. Phase 1 permits only container lifecycle calls by full ID.
+ * allow-listed (method, path) pair. Allowed: container lifecycle by full ID; image pull, tag and
+ * untag/remove by name; container create + rename and network attach (standalone clone). Each needs a
+ * permit naming exactly that target. Image removal is never forced.
  */
 export function checkEngineRequest(
   method: string,
@@ -243,9 +280,57 @@ export function checkEngineRequest(
   const ro = guard.readOnlyReason;
   if (ro) throw new AppError(409, 'read_only', `Read-only mode: ${ro}`);
   const pathOnly = (rawPath.split('?')[0] ?? '').replace(/^\/v\d+(\.\d+)?(?=\/)/, '');
+  const q = new URLSearchParams(rawPath.split('?')[1] ?? '');
+  const kind = permit && 'kind' in permit ? permit.kind : undefined;
+  let mm: RegExpExecArray | null;
+
+  // ---- images
+  if (m === 'POST' && pathOnly === '/images/create') {
+    if (!permit || kind !== 'image_pull') return denyPermit(m, pathOnly);
+    const p = permit as Extract<EnginePermit, { kind: 'image_pull' }>;
+    if (q.get('fromImage') !== p.repo || q.get('tag') !== p.tag) return denyPermit(m, pathOnly);
+    return;
+  }
+  if (m === 'POST' && (mm = IMAGE_TAG.exec(pathOnly))) {
+    if (!permit || kind !== 'image_tag') return denyPermit(m, pathOnly);
+    const p = permit as Extract<EnginePermit, { kind: 'image_tag' }>;
+    if (decode(mm[1] ?? '') !== p.imageId || q.get('repo') !== p.repo || q.get('tag') !== p.tag)
+      return denyPermit(m, pathOnly);
+    return;
+  }
+  if (m === 'DELETE' && !CONTAINER_DELETE.test(pathOnly) && (mm = IMAGE_DELETE.exec(pathOnly))) {
+    if (!permit || kind !== 'image_remove') return notAllowListed(m, pathOnly);
+    const p = permit as Extract<EnginePermit, { kind: 'image_remove' }>;
+    if (decode(mm[1] ?? '') !== p.name || q.get('force') === 'true' || q.get('force') === '1')
+      return denyPermit(m, pathOnly);
+    return;
+  }
+
+  // ---- containers: create / rename (standalone clone, RT-12)
+  if (m === 'POST' && pathOnly === '/containers/create') {
+    if (!permit || kind !== 'container_create') return denyPermit(m, pathOnly);
+    if (q.get('name') !== (permit as Extract<EnginePermit, { kind: 'container_create' }>).name)
+      return denyPermit(m, pathOnly);
+    return;
+  }
+  if (m === 'POST' && (mm = CONTAINER_RENAME.exec(pathOnly))) {
+    if (!permit || kind !== 'container_rename') return denyPermit(m, pathOnly);
+    const p = permit as Extract<EnginePermit, { kind: 'container_rename' }>;
+    if (mm[1] !== p.containerId || q.get('name') !== p.newName) return denyPermit(m, pathOnly);
+    return;
+  }
+  if (m === 'POST' && (mm = NETWORK_ATTACH.exec(pathOnly))) {
+    if (!permit || (kind !== 'network_connect' && kind !== 'network_disconnect'))
+      return denyPermit(m, pathOnly);
+    const p = permit as Extract<EnginePermit, { kind: 'network_connect' | 'network_disconnect' }>;
+    if (kind !== `network_${mm[2]}` || decode(mm[1] ?? '') !== p.network) return denyPermit(m, pathOnly);
+    return;
+  }
+
+  // ---- containers: lifecycle by full ID
   let id: string | undefined;
   let action: ContainerAction | undefined;
-  let mm = CONTAINER_POST.exec(pathOnly);
+  mm = CONTAINER_POST.exec(pathOnly);
   if (m === 'POST' && mm) {
     id = mm[1];
     action = mm[2] as ContainerAction;
@@ -253,21 +338,14 @@ export function checkEngineRequest(
     id = mm[1];
     action = 'remove';
   }
-  if (!id || !action) {
-    throw new AppError(403, 'unsupported', `Engine call ${m} ${pathOnly} is not on the allow-list`);
-  }
-  if (!permit || permit.containerId !== id || permit.action !== action) {
-    throw new AppError(
-      403,
-      'internal',
-      `Engine mutation ${m} ${pathOnly} was not authorised by the service layer`,
-    );
-  }
+  if (!id || !action) return notAllowListed(m, pathOnly);
+  const cp = permit && !kind ? (permit as ContainerPermit) : undefined;
+  if (!cp || cp.containerId !== id || cp.action !== action) return denyPermit(m, pathOnly);
 }
 
 interface ModemLike {
   dial: (
-    options: { method?: string; path?: string },
+    options: { method?: string; path?: string; options?: Record<string, unknown> },
     callback: (err: unknown, data?: unknown) => void,
   ) => void;
 }
@@ -277,11 +355,24 @@ export function enforceOnModem(modem: ModemLike, guard: Pick<Guard, 'readOnlyRea
   const original = modem.dial.bind(modem);
   modem.dial = (options, callback) => {
     try {
-      checkEngineRequest(options.method ?? 'GET', options.path ?? '', guard, permitStore.getStore());
+      checkEngineRequest(options.method ?? 'GET', withQuery(options.path ?? '', options.options), guard, permitStore.getStore());
     } catch (e) {
       callback(e);
       return;
     }
     original(options, callback);
   };
+}
+
+/** docker-modem keeps query parameters in `options.options`; the allow-list must see them too. */
+export function withQuery(path: string, query: Record<string, unknown> | undefined): string {
+  if (!query) return path;
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v === undefined || v === null || typeof v === 'object') continue;
+    qs.set(k, String(v));
+  }
+  const s = qs.toString();
+  if (!s) return path;
+  return path.includes('?') ? `${path}${path.endsWith('?') ? '' : '&'}${s}` : `${path}?${s}`;
 }

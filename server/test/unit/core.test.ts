@@ -8,7 +8,7 @@ import {
   checkEngineRequest,
   globToRegExp,
   NO_SELF,
-  type MutationPermit,
+  type ContainerPermit,
 } from '../../src/security/guard.js';
 import { containerIdFromCgroup, containerIdFromMountinfo, detectSelf } from '../../src/security/self.js';
 import { buildComposeArgv, assertSafeArgv } from '../../src/compose/argv.js';
@@ -142,7 +142,7 @@ describe('guard: read-only, scope, self-protection (RT-03, RT-05)', () => {
   });
   it('transport allow-list: reads pass; mutations need read-write, a permit for that exact id and an allow-listed path', () => {
     const rw = { readOnlyReason: null };
-    const permit = (action: MutationPermit['action'], id = ID): MutationPermit => ({
+    const permit = (action: ContainerPermit['action'], id = ID): ContainerPermit => ({
       action,
       containerId: id,
     });

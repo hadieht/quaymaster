@@ -21,6 +21,10 @@ export type ErrorCode =
   | 'unsupported'
   | 'docker_unavailable'
   | 'compose_failed'
+  | 'approval_stale'
+  | 'window_closed'
+  | 'insufficient_disk'
+  | 'registry_error'
   | 'setup_required'
   | 'internal';
 

@@ -60,6 +60,11 @@ const schema = z.object({
   QM_SCRYPT_LOG2_N: int(10, 20).default(17),
   QM_DOCKER_BIN: z.string().default('docker'),
   QM_DISABLE_BACKGROUND: bool.default('false'),
+  QM_REGISTRY_INSECURE: list.default(''),
+  QM_CHECK_TTL_MINUTES: int(1, 7 * 24 * 60).default(360),
+  QM_ROLLBACK_RETENTION_DAYS: int(0, 365).default(7),
+  QM_CLEANUP_MIN_AGE_HOURS: int(0, 24 * 365).default(24),
+  QM_APPROVAL_EXPIRY_HOURS: int(1, 24 * 30).default(72),
 });
 
 export interface Config {
@@ -90,6 +95,11 @@ export interface Config {
   scryptLog2N: number;
   dockerBin: string;
   disableBackground: boolean;
+  registryInsecure: string[];
+  checkTtlMs: number;
+  rollbackRetentionMs: number;
+  cleanupMinAgeMs: number;
+  approvalExpiryMs: number;
 }
 
 /** Decodes a key given as hex or base64 (>= 32 decoded bytes). Passphrases are rejected. */
@@ -231,5 +241,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     scryptLog2N: e.QM_SCRYPT_LOG2_N,
     dockerBin: e.QM_DOCKER_BIN,
     disableBackground: e.QM_DISABLE_BACKGROUND,
+    registryInsecure: e.QM_REGISTRY_INSECURE,
+    checkTtlMs: e.QM_CHECK_TTL_MINUTES * 60_000,
+    rollbackRetentionMs: e.QM_ROLLBACK_RETENTION_DAYS * 86_400_000,
+    cleanupMinAgeMs: e.QM_CLEANUP_MIN_AGE_HOURS * 3_600_000,
+    approvalExpiryMs: e.QM_APPROVAL_EXPIRY_HOURS * 3_600_000,
   };
 }
