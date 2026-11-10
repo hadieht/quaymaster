@@ -43,10 +43,14 @@ export class ImageOps {
     },
   ) {}
 
-  authFor(ref: Pick<ImageRef, 'registry'>): { username: string; password: string; serveraddress: string } | undefined {
+  authFor(
+    ref: Pick<ImageRef, 'registry'>,
+  ): { username: string; password: string; serveraddress: string } | undefined {
     const host = ref.registry === 'docker.io' ? 'registry-1.docker.io' : ref.registry;
     const c = this.d.creds.get(host) ?? this.d.creds.get(ref.registry);
-    return c ? { ...c, serveraddress: ref.registry === 'docker.io' ? 'https://index.docker.io/v1/' : ref.registry } : undefined;
+    return c
+      ? { ...c, serveraddress: ref.registry === 'docker.io' ? 'https://index.docker.io/v1/' : ref.registry }
+      : undefined;
   }
 
   async inspect(nameOrId: string): Promise<Dockerode.ImageInspectInfo | null> {
@@ -86,7 +90,11 @@ export class ImageOps {
               options: { fromImage: repo, tag: digest },
               authconfig: auth,
               isStream: true,
-              statusCodes: { 200: true, 404: 'repository does not exist or no pull access', 500: 'server error' },
+              statusCodes: {
+                200: true,
+                404: 'repository does not exist or no pull access',
+                500: 'server error',
+              },
             },
             (e, s) => (e ? reject(e) : resolve(s)),
           );
@@ -124,7 +132,11 @@ export class ImageOps {
       });
     } catch (e) {
       if (e instanceof AppError) throw e;
-      throw new AppError(502, 'registry_error', `pull of ${repo}@${digest.slice(0, 19)} failed: ${(e as Error).message}`);
+      throw new AppError(
+        502,
+        'registry_error',
+        `pull of ${repo}@${digest.slice(0, 19)} failed: ${(e as Error).message}`,
+      );
     } finally {
       if (guardTimer) clearInterval(guardTimer);
     }

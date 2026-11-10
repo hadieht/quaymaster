@@ -18,7 +18,7 @@ export type ComposeCommand =
   | { sub: 'config'; hash: string[] }
   | { sub: 'ps' }
   | { sub: 'images' }
-  | { sub: 'up'; services: string[]; noDeps: boolean; forceRecreate: boolean }
+  | { sub: 'up'; services: string[]; noDeps: boolean; forceRecreate: boolean; noStart?: boolean }
   | { sub: 'stop'; services: string[] }
   | { sub: 'start'; services: string[] }
   | { sub: 'restart'; services: string[] }
@@ -87,7 +87,7 @@ export function buildComposeArgv(t: ComposeTarget, cmd: ComposeCommand): string[
       argv = [
         ...base,
         'up',
-        '--detach',
+        ...(cmd.noStart ? ['--no-start'] : ['--detach']),
         '--no-build',
         '--pull=never',
         ...(cmd.noDeps ? ['--no-deps'] : []),
@@ -135,4 +135,9 @@ export function assertSafeArgv(argv: readonly string[], opts: { allowForceRecrea
 export function subcommandOf(argv: readonly string[]): string {
   for (const a of argv.slice(1)) if (!a.startsWith('-')) return a;
   return '';
+}
+
+/** POSIX single-quote for DISPLAY in recovery guidance only; commands are never executed through a shell. */
+export function shQuote(s: string): string {
+  return /^[A-Za-z0-9_@%+=:,./-]+$/.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`;
 }

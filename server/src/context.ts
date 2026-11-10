@@ -27,6 +27,26 @@ import { StatsSampler } from './docker/stats.js';
 import { DiskUsageService, SystemService } from './docker/system.js';
 import { DEFAULT_SSE_LIMITS, SseHub } from './http/sse.js';
 import { OperationManager } from './operations/manager.js';
+import { OccurrencesRepo, PoliciesRepo, RunsRepo, SchedulesRepo, WindowsRepo } from './db/maintenance.js';
+import {
+  ImageChecksRepo,
+  QuarantineRepo,
+  RegistryCredentialsRepo,
+  RollbackRepo,
+  StagedRepo,
+} from './db/updates.js';
+import { ImageOps } from './docker/imageops.js';
+import { AdjustableClock } from './maintenance/clock.js';
+import { RunExecutor } from './maintenance/executor.js';
+import { MaintenanceService } from './maintenance/service.js';
+import { Planner } from './maintenance/planner.js';
+import { PolicyResolver } from './maintenance/policy.js';
+import { Monitors } from './monitor/monitors.js';
+import { NotificationService } from './notifications/service.js';
+import { RegistryClient } from './registry/client.js';
+import { cacheKey, parseImageRef } from './registry/reference.js';
+import { CleanupService } from './updates/cleanup.js';
+import { UpdateService } from './updates/detector.js';
 import { Guard } from './security/guard.js';
 import { detectSelf } from './security/self.js';
 import { createLogger, type Logger } from './util/logger.js';
@@ -61,6 +81,23 @@ export interface AppContext {
   runner: ComposeRunner;
   policy: PathPolicy;
   compose: ComposeService;
+  clock: AdjustableClock;
+  notifications: NotificationService;
+  registry: RegistryClient;
+  registryCreds: RegistryCredentialsRepo;
+  checksRepo: ImageChecksRepo;
+  stagedRepo: StagedRepo;
+  rollbackRepo: RollbackRepo;
+  quarantineRepo: QuarantineRepo;
+  policiesRepo: PoliciesRepo;
+  runsRepo: RunsRepo;
+  imageOps: ImageOps;
+  updates: UpdateService;
+  cleanup: CleanupService;
+  planner: Planner;
+  executor: RunExecutor;
+  maintenance: MaintenanceService;
+  monitors: Monitors;
   startedAt: number;
   setupOutcome: string;
   shutdown(): Promise<void>;
@@ -176,7 +213,144 @@ async function build(
 
   const timers: NodeJS.Timeout[] = [];
   const background = options.background ?? !config.disableBackground;
+
+  // ---- phase 2: updates, maintenance, notifications ------------------------------------------
+  const clock = new AdjustableClock();
+  const secrets = new SecretStore(db, box);
+  const notifications = new NotificationService({ db, secrets, audit, log });
+  const notify = (e: Parameters<NotificationService['emit']>[0]): void => notifications.emit(e);
+  const registryCreds = new RegistryCredentialsRepo(db, secrets);
+  const checksRepo = new ImageChecksRepo(db);
+  const stagedRepo = new StagedRepo(db);
+  const rollbackRepo = new RollbackRepo(db);
+  const quarantineRepo = new QuarantineRepo(db);
+  const policiesRepo = new PoliciesRepo(db);
+  const runsRepo = new RunsRepo(db);
+  const registry = new RegistryClient({
+    credentials: (host) => registryCreds.get(host),
+    insecureHosts: config.registryInsecure,
+  });
+  const imageOps = new ImageOps({
+    docker,
+    creds: registryCreds,
+    staged: stagedRepo,
+    audit,
+    freeBytes: async () => (await system.host().catch(() => null))?.dockerRoot?.free ?? null,
+    floorBytes: config.diskFloorBytes,
+  });
+  const updates = new UpdateService({
+    docker,
+    containers,
+    registry,
+    checks: checksRepo,
+    staged: stagedRepo,
+    quarantine: quarantineRepo,
+    ttlMs: config.checkTtlMs,
+    log,
+  });
+  const resolver = new PolicyResolver(policiesRepo);
+  const planner = new Planner({
+    compose,
+    containers,
+    updates,
+    registry,
+    policies: resolver,
+    quarantine: quarantineRepo,
+    system,
+    guard,
+    config,
+    log,
+    now: () => clock.now(),
+  });
+  const windowsRepo = new WindowsRepo(db);
+  const executor = new RunExecutor({
+    compose,
+    docker,
+    images: imageOps,
+    updates,
+    planner,
+    runs: runsRepo,
+    windows: windowsRepo,
+    rollback: rollbackRepo,
+    staged: stagedRepo,
+    quarantine: quarantineRepo,
+    audit,
+    notify,
+    config,
+    clock,
+    log,
+  });
+  const cleanup = new CleanupService({
+    docker,
+    containers,
+    images: imageOps,
+    guard,
+    audit,
+    rollback: rollbackRepo,
+    staged: stagedRepo,
+    projectImageRefs: async () => {
+      const refs = new Set<string>();
+      for (const p of await compose.discover()) {
+        if (p.level !== 'full') continue;
+        try {
+          const cfg = (await compose.resolvedConfig(p.name)).config;
+          for (const svc of Object.values(cfg.services ?? {})) {
+            if (!svc.image) continue;
+            refs.add(svc.image);
+            const r = parseImageRef(svc.image);
+            if (r) refs.add(cacheKey(r));
+          }
+        } catch {
+          /* a project that does not resolve protects nothing it cannot name; running containers still protect their images */
+        }
+      }
+      return refs;
+    },
+    minAgeMs: config.cleanupMinAgeMs,
+    retentionMs: config.rollbackRetentionMs,
+    log,
+  });
+  const maintenance = new MaintenanceService({
+    runs: runsRepo,
+    windows: windowsRepo,
+    schedules: new SchedulesRepo(db),
+    occurrences: new OccurrencesRepo(db),
+    resolver,
+    planner,
+    executor,
+    ops,
+    updates,
+    images: imageOps,
+    cleanup,
+    compose,
+    guard,
+    audit,
+    notify,
+    clock,
+    config,
+    log,
+  });
+  const monitors = new Monitors({
+    kv: new KvRepo(db),
+    system,
+    schedules: new SchedulesRepo(db),
+    updates,
+    maintenance,
+    notify,
+    maintenanceBusy: () => ops.busy(),
+    clock,
+    log,
+  });
+  const interruptedRuns = await maintenance.recover();
+  if (interruptedRuns > 0)
+    log.warn({ interruptedRuns }, 'maintenance runs left running by a crash were marked interrupted');
+  events.on('event', (e: Parameters<Monitors['onDockerEvent']>[0]) => monitors.onDockerEvent(e));
+  stats.on('sample', (s: Parameters<Monitors['onSample']>[0]) => monitors.onSample(s));
+
   if (background) {
+    notifications.start();
+    maintenance.start_();
+    monitors.start();
     await events.start();
     stats.start();
     // housekeeping: batched deletes so the event loop is never blocked (RT-26)
@@ -226,13 +400,34 @@ async function build(
     runner,
     policy,
     compose,
+    clock,
+    notifications,
+    registry,
+    registryCreds,
+    checksRepo,
+    stagedRepo,
+    rollbackRepo,
+    quarantineRepo,
+    policiesRepo,
+    runsRepo,
+    imageOps,
+    updates,
+    cleanup,
+    planner,
+    executor,
+    maintenance,
+    monitors,
     startedAt: Date.now(),
     setupOutcome,
     async shutdown() {
       if (closed) return;
       closed = true;
       // graceful (RT-14): stop taking new work, let running Compose operations finish
+      maintenance.stop();
+      monitors.stop();
       await ops.drain(120_000);
+      await notifications.flush().catch(() => undefined);
+      notifications.stop();
       sse.closeAll('server shutting down');
       events.stop();
       stats.stop();

@@ -11,6 +11,9 @@ import { registerComposeRoutes } from './routes/compose.js';
 import { registerContainerRoutes } from './routes/containers.js';
 import { registerInventoryRoutes } from './routes/inventory.js';
 import { registerMiscRoutes } from './routes/misc.js';
+import { registerMaintenanceRoutes } from './routes/maintenance.js';
+import { registerNotificationRoutes } from './routes/notifications.js';
+import { registerUpdateRoutes } from './routes/updates.js';
 import { registerStreamRoutes } from './routes/streams.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { AppError, forbidden, unauthorized } from './util/errors.js';
@@ -215,6 +218,9 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       registerComposeRoutes(api, ctx);
       registerInventoryRoutes(api, ctx);
       registerMiscRoutes(api, ctx);
+      registerUpdateRoutes(api, ctx);
+      registerMaintenanceRoutes(api, ctx);
+      registerNotificationRoutes(api, ctx);
       registerStreamRoutes(api, ctx);
     },
     { prefix },

@@ -87,7 +87,8 @@ export class CleanupService {
   ): Promise<CleanupPreview> {
     const categories = req.categories?.length ? req.categories : ALL_CATEGORIES;
     for (const c of categories) if (!ALL_CATEGORIES.includes(c)) throw badRequest(`Unknown category "${c}"`);
-    const minAgeMs = req.minAgeHours !== undefined ? Math.max(req.minAgeHours, 0) * 3_600_000 : this.d.minAgeMs;
+    const minAgeMs =
+      req.minAgeHours !== undefined ? Math.max(req.minAgeHours, 0) * 3_600_000 : this.d.minAgeMs;
     const labelFilter = req.labelFilter ?? null;
     if (labelFilter !== null && !/^[A-Za-z0-9_.-]+(=[A-Za-z0-9_.-]*)?$/.test(labelFilter))
       throw badRequest('labelFilter must be key or key=value');
@@ -101,7 +102,8 @@ export class CleanupService {
     const containers = await this.d.containers.listRaw(true);
     const usedImageIds = new Set(containers.map((c) => c.ImageID));
     const usedByName = new Map<string, string>();
-    for (const c of containers) usedByName.set(c.ImageID, (c.Names?.[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''));
+    for (const c of containers)
+      usedByName.set(c.ImageID, (c.Names?.[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''));
     const referenced = await this.d.projectImageRefs();
     const rollbackActive = new Map(this.d.rollback.active().map((r) => [r.tag, r]));
     const rollbackImageIds = new Set(

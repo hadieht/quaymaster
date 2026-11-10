@@ -13,7 +13,12 @@ export interface ImageRef {
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/;
 export const isDigest = (s: string): boolean => DIGEST_RE.test(s);
 
-const HUB_ALIASES = new Set(['docker.io', 'index.docker.io', 'registry-1.docker.io', 'registry.hub.docker.com']);
+const HUB_ALIASES = new Set([
+  'docker.io',
+  'index.docker.io',
+  'registry-1.docker.io',
+  'registry.hub.docker.com',
+]);
 
 /** Parses `[registry/]repo[:tag][@sha256:digest]`. Returns null for references that are not valid. */
 export function parseImageRef(input: string): ImageRef | null {
@@ -43,7 +48,10 @@ export function parseImageRef(input: string): ImageRef | null {
   }
   if (HUB_ALIASES.has(registry)) registry = 'docker.io';
   let repo = parts.join('/');
-  if (!repo || !/^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:\/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*$/.test(repo))
+  if (
+    !repo ||
+    !/^[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*(?:\/[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*)*$/.test(repo)
+  )
     return null;
   if (registry === 'docker.io' && !repo.includes('/')) repo = `library/${repo}`;
   if (!tag && !digest) tag = 'latest';

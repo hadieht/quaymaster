@@ -355,7 +355,12 @@ export function enforceOnModem(modem: ModemLike, guard: Pick<Guard, 'readOnlyRea
   const original = modem.dial.bind(modem);
   modem.dial = (options, callback) => {
     try {
-      checkEngineRequest(options.method ?? 'GET', withQuery(options.path ?? '', options.options), guard, permitStore.getStore());
+      checkEngineRequest(
+        options.method ?? 'GET',
+        withQuery(options.path ?? '', options.options),
+        guard,
+        permitStore.getStore(),
+      );
     } catch (e) {
       callback(e);
       return;

@@ -13,6 +13,25 @@ const eventStreamQuery = z.object({ sinceId: z.coerce.number().int().min(0).opti
 
 /** SSE streams. Each is registered in the SseHub and bound to the caller's session (RT-15). */
 export function registerStreamRoutes(app: FastifyInstance, ctx: AppContext): void {
+  /** Run progress: a snapshot, then a `run` event whenever a run's status changes (checked every 2 s). */
+  app.get('/stream/maintenance', async (req, reply) => {
+    const conn = ctx.sse.open(req, reply, req.auth as NonNullable<typeof req.auth>);
+    const sig = new Map<string, string>();
+    const push = (first: boolean): void => {
+      for (const r of ctx.maintenance.listRuns({ limit: 20 }).reverse()) {
+        const s = `${r.status}|${r.finishedAt ?? ''}|${ctx.runsRepo.steps(r.id).length}`;
+        if (sig.get(r.id) !== s) {
+          sig.set(r.id, s);
+          conn.send(first ? 'snapshot' : 'run', r);
+        }
+      }
+    };
+    push(true);
+    const timer = setInterval(() => push(false), 2000);
+    timer.unref();
+    conn.onClose(() => clearInterval(timer));
+  });
+
   app.get('/stream/events', async (req, reply) => {
     const q = parseBody(eventStreamQuery, req.query);
     const conn = ctx.sse.open(req, reply, req.auth as NonNullable<typeof req.auth>);

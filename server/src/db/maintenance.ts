@@ -24,7 +24,10 @@ export class PoliciesRepo {
   }
 
   delete(kind: PolicyScopeKind, key: string): boolean {
-    return this.db.prepare('DELETE FROM policies WHERE scope_kind = ? AND scope_key = ?').run(kind, key).changes > 0;
+    return (
+      this.db.prepare('DELETE FROM policies WHERE scope_kind = ? AND scope_key = ?').run(kind, key).changes >
+      0
+    );
   }
 
   list(): { kind: PolicyScopeKind; key: string; policy: PolicyInput; updatedAt: number }[] {
@@ -158,7 +161,9 @@ const toSchedule = (r: ScheduleDbRow): ScheduleRow => ({
 export class SchedulesRepo {
   constructor(private readonly db: Db) {}
   list(): ScheduleRow[] {
-    return (this.db.prepare('SELECT * FROM schedules ORDER BY name').all() as ScheduleDbRow[]).map(toSchedule);
+    return (this.db.prepare('SELECT * FROM schedules ORDER BY name').all() as ScheduleDbRow[]).map(
+      toSchedule,
+    );
   }
   get(id: string): ScheduleRow | undefined {
     const r = this.db.prepare('SELECT * FROM schedules WHERE id = ?').get(id) as ScheduleDbRow | undefined;
@@ -283,6 +288,10 @@ export interface RunOptions {
   unattended?: boolean;
   /** Manual run that may start outside the schedule's window. */
   ignoreWindow?: boolean;
+  /** Mode of the triggering schedule (null/undefined = manual). */
+  scheduleMode?: 'manual' | 'auto' | null;
+  /** Only services with these update modes are part of the run (scheduled runs: auto). */
+  onlyModes?: ('ignore' | 'notify' | 'pull_only' | 'auto')[];
 }
 
 interface RunDbRow {
@@ -447,8 +456,14 @@ export class RunsRepo {
       .run(status, reason ?? null, id);
   }
 
+  setWindowEnd(id: string, endUtc: number | null): void {
+    this.db.prepare('UPDATE runs SET window_end_utc = ? WHERE id = ?').run(endUtc, id);
+  }
+
   setPlan(id: string, plan: Plan): void {
-    this.db.prepare('UPDATE runs SET plan = ?, plan_hash = ? WHERE id = ?').run(JSON.stringify(plan), plan.planHash, id);
+    this.db
+      .prepare('UPDATE runs SET plan = ?, plan_hash = ? WHERE id = ?')
+      .run(JSON.stringify(plan), plan.planHash, id);
   }
 
   approve(id: string, by: string, planHash: string): boolean {
@@ -465,7 +480,13 @@ export class RunsRepo {
     this.db.prepare("UPDATE runs SET status='running', started_at=? WHERE id=?").run(Date.now(), id);
   }
 
-  finish(id: string, status: RunStatus, result: RunResult | null, guidance: string[] | null, reason?: string | null): void {
+  finish(
+    id: string,
+    status: RunStatus,
+    result: RunResult | null,
+    guidance: string[] | null,
+    reason?: string | null,
+  ): void {
     this.db
       .prepare(
         'UPDATE runs SET status=?, finished_at=?, result=?, guidance=?, reason=COALESCE(?, reason) WHERE id=?',
@@ -495,7 +516,9 @@ export class RunsRepo {
   expireApprovals(now: number): RunRow[] {
     const rows = (
       this.db
-        .prepare("SELECT * FROM runs WHERE status='awaiting_approval' AND approval_expires_at IS NOT NULL AND approval_expires_at <= ?")
+        .prepare(
+          "SELECT * FROM runs WHERE status='awaiting_approval' AND approval_expires_at IS NOT NULL AND approval_expires_at <= ?",
+        )
         .all(now) as RunDbRow[]
     ).map(toRun);
     this.db
@@ -508,7 +531,8 @@ export class RunsRepo {
 
   /** Is any run currently executing? (single-run lock, persisted) */
   running(): RunRow | undefined {
-    const r = this.db.prepare("SELECT * FROM runs WHERE status='running' LIMIT 1").get() as RunDbRow | undefined;
+    const r = this.db.prepare("SELECT * FROM runs WHERE status='running' LIMIT 1").get() as
+      RunDbRow | undefined;
     return r ? toRun(r) : undefined;
   }
 
@@ -594,7 +618,9 @@ export class RunsRepo {
   openIntents(operationId?: string): IntentRow[] {
     const rows = (
       operationId
-        ? this.db.prepare('SELECT * FROM intents WHERE completed_at IS NULL AND operation_id = ?').all(operationId)
+        ? this.db
+            .prepare('SELECT * FROM intents WHERE completed_at IS NULL AND operation_id = ?')
+            .all(operationId)
         : this.db.prepare('SELECT * FROM intents WHERE completed_at IS NULL').all()
     ) as {
       id: number;

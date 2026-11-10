@@ -53,6 +53,8 @@ export class OperationManager {
    * operations on the same target; a second one is rejected with 409.
    */
   start(op: {
+    /** Use a pre-allocated id (maintenance runs share their id with the operation record). */
+    id?: string;
     kind: string;
     target: string;
     actor: string;
@@ -65,7 +67,7 @@ export class OperationManager {
     const holder = this.locks.get(op.lockKey);
     if (holder)
       throw conflict('conflict', `Another operation (${holder}) is already running on ${op.lockKey}`);
-    const id = randomUUID();
+    const id = op.id ?? randomUUID();
     this.locks.set(op.lockKey, id);
     this.repo.create({
       id,

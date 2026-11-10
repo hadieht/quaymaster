@@ -144,7 +144,9 @@ export class QuarantineRepo {
   clear(target: string, digest: string | null, now: number): number {
     return digest
       ? this.db
-          .prepare('UPDATE quarantine SET cleared_at = ? WHERE target = ? AND digest = ? AND cleared_at IS NULL')
+          .prepare(
+            'UPDATE quarantine SET cleared_at = ? WHERE target = ? AND digest = ? AND cleared_at IS NULL',
+          )
           .run(now, target, digest).changes
       : this.db
           .prepare('UPDATE quarantine SET cleared_at = ? WHERE target = ? AND cleared_at IS NULL')
@@ -176,8 +178,7 @@ export class RegistryCredentialsRepo {
 
   get(host: string): { username: string; password: string } | undefined {
     const row = this.db.prepare('SELECT username FROM registry_credentials WHERE host = ?').get(host) as
-      | { username: string }
-      | undefined;
+      { username: string } | undefined;
     if (!row) return undefined;
     const password = this.secrets.get(`registry:${host}`);
     return password === undefined ? undefined : { username: row.username, password };

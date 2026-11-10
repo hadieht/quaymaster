@@ -9,7 +9,8 @@ export const MANIFEST_ACCEPT = [
   'application/vnd.docker.distribution.manifest.v2+json',
 ].join(', ');
 
-export type RegistryErrorKind = 'unauthorized' | 'not_found' | 'rate_limited' | 'network' | 'invalid' | 'other';
+export type RegistryErrorKind =
+  'unauthorized' | 'not_found' | 'rate_limited' | 'network' | 'invalid' | 'other';
 
 export class RegistryError extends Error {
   constructor(
@@ -306,11 +307,16 @@ export class RegistryClient {
     realm.searchParams.set('scope', ch.params['scope'] ?? `repository:${ref.repo}:pull`);
     const headers: Record<string, string> = {};
     if (creds)
-      headers['Authorization'] = `Basic ${Buffer.from(`${creds.username}:${creds.password}`).toString('base64')}`;
+      headers['Authorization'] =
+        `Basic ${Buffer.from(`${creds.username}:${creds.password}`).toString('base64')}`;
     const res = await this.fetchTimed(realm.toString(), 'GET', headers);
     if (res.status === 429) throw new RegistryError('rate_limited', `${realm.host} answered HTTP 429`, 429);
     if (!res.ok)
-      throw new RegistryError('unauthorized', `${realm.host}: token request failed (HTTP ${res.status})`, res.status);
+      throw new RegistryError(
+        'unauthorized',
+        `${realm.host}: token request failed (HTTP ${res.status})`,
+        res.status,
+      );
     const body = (await res.json().catch(() => null)) as {
       token?: string;
       access_token?: string;

@@ -1,4 +1,10 @@
-import type { EffectivePolicy, HealthPolicy, PolicyInput, PolicyScopeKind, UpdateMode } from '@quaymaster/shared';
+import type {
+  EffectivePolicy,
+  HealthPolicy,
+  PolicyInput,
+  PolicyScopeKind,
+  UpdateMode,
+} from '@quaymaster/shared';
 import type { PoliciesRepo } from '../db/maintenance.js';
 import { AppError } from '../util/errors.js';
 

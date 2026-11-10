@@ -36,14 +36,27 @@ export function classify(input: {
   const { ref } = input;
   if (input.imageIsId)
     return { state: 'unknown', reason: 'the container references an image ID, not a tag', localDigest: null };
-  if (!ref) return { state: 'unknown', reason: `cannot parse image reference "${input.rawRef}"`, localDigest: null };
+  if (!ref)
+    return { state: 'unknown', reason: `cannot parse image reference "${input.rawRef}"`, localDigest: null };
   if (ref.digest)
-    return { state: 'pinned_digest', reason: 'the reference is pinned to a digest; there is nothing to update', localDigest: ref.digest };
+    return {
+      state: 'pinned_digest',
+      reason: 'the reference is pinned to a digest; there is nothing to update',
+      localDigest: ref.digest,
+    };
   const local = digestsForRepo(input.localRepoDigests, ref);
   if (local.length === 0 && input.remote.error?.kind === 'not_found')
-    return { state: 'local_only', reason: 'not found in the registry and no registry digest recorded locally (built locally?)', localDigest: null };
+    return {
+      state: 'local_only',
+      reason: 'not found in the registry and no registry digest recorded locally (built locally?)',
+      localDigest: null,
+    };
   if (local.length === 0 && !input.remote.digest && input.remote.error)
-    return { state: 'local_only', reason: `no registry digest recorded locally (built locally or never pulled) — ${input.remote.error.message}`, localDigest: null };
+    return {
+      state: 'local_only',
+      reason: `no registry digest recorded locally (built locally or never pulled) — ${input.remote.error.message}`,
+      localDigest: null,
+    };
   if (input.remote.error || !input.remote.digest) {
     return {
       state: 'unknown',
@@ -60,7 +73,11 @@ export function classify(input: {
   }
   const remote = input.remote.digest;
   if (local.includes(remote) || (input.remotePlatformDigests ?? []).some((d) => local.includes(d))) {
-    return { state: 'up_to_date', reason: null, localDigest: local.includes(remote) ? remote : (local[0] ?? null) };
+    return {
+      state: 'up_to_date',
+      reason: null,
+      localDigest: local.includes(remote) ? remote : (local[0] ?? null),
+    };
   }
   return {
     state: input.stagedPresent ? 'update_staged' : 'update_available',
@@ -156,8 +173,7 @@ export class UpdateService {
         platformDigests = await this.platformDigests(ref, remote.digest);
       }
     }
-    const stagedPresent =
-      !!ref && !!remote.digest && (await this.isStaged(ref, remote.digest));
+    const stagedPresent = !!ref && !!remote.digest && (await this.isStaged(ref, remote.digest));
     const c = classify({
       ref,
       rawRef: u.ref,
@@ -204,7 +220,8 @@ export class UpdateService {
         return {
           digest: hit.remote_digest,
           source: 'cache',
-          error: hit.state === 'error' ? { kind: 'cached', message: hit.reason ?? 'earlier lookup failed' } : null,
+          error:
+            hit.state === 'error' ? { kind: 'cached', message: hit.reason ?? 'earlier lookup failed' } : null,
           checkedAt: hit.checked_at,
         };
       }
@@ -225,7 +242,12 @@ export class UpdateService {
       const viaEngine = err.kind === 'not_found' ? null : await this.engineDigest(ref);
       result = viaEngine
         ? { digest: viaEngine, source: 'engine', error: null, checkedAt: now }
-        : { digest: null, source: 'registry', error: { kind: err.kind, message: err.message }, checkedAt: now };
+        : {
+            digest: null,
+            source: 'registry',
+            error: { kind: err.kind, message: err.message },
+            checkedAt: now,
+          };
     }
     this.d.checks.put({
       ref: key,

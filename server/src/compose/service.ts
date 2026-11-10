@@ -247,10 +247,68 @@ export class ComposeService implements Recreator {
     };
   }
 
+  // ---- update-workflow primitives (used by the maintenance planner / executor) -------------
+
+  /** Summary + trusted Compose target of a project (throws `limited_capability` when files are not trusted). */
+  async targetOf(
+    name: string,
+    fresh = false,
+  ): Promise<{ summary: ComposeProjectSummary; target: ComposeTarget }> {
+    const summary = fresh
+      ? ((await this.discover(true)).find((p) => p.name === name) ?? (await this.summary(name)))
+      : await this.summary(name);
+    return { summary, target: this.fullTarget(summary) };
+  }
+
+  /** Raw containers of a project (fresh list). */
+  async projectContainers(name: string): Promise<Dockerode.ContainerInfo[]> {
+    return (await this.d.containers.listRaw(true)).filter((c) => c.Labels?.[LABEL.project] === name);
+  }
+
+  /**
+   * One `docker compose up` for exactly the given services (`--no-deps`, `--no-build`, `--pull never`).
+   * The service layer checks read-only / scope / self-protection for the project and each container
+   * first; the runner enforces the subcommand allow-list again.
+   */
+  async deployServices(
+    target: ComposeTarget,
+    opts: { services: string[]; forceRecreate?: boolean; noStart?: boolean },
+    onOutput?: (chunk: string) => void,
+  ): Promise<{ code: number; timedOut: boolean; stderrTail: string; argv: string[] }> {
+    const cfg = await this.resolvedConfig(target.projectName, true);
+    this.d.guard.assertProject(target.projectName, projectReferences(cfg.config), { perService: true });
+    const containers = await this.projectContainers(target.projectName);
+    for (const c of containers.filter((c) => opts.services.includes(c.Labels?.[LABEL.service] ?? ''))) {
+      this.d.guard.assertContainer(
+        { id: c.Id, name: (c.Names?.[0] ?? '').replace(/^\//, ''), project: target.projectName },
+        'compose',
+      );
+    }
+    const argv = buildComposeArgv(target, {
+      sub: 'up',
+      services: opts.services,
+      noDeps: true,
+      forceRecreate: opts.forceRecreate === true,
+      noStart: opts.noStart === true,
+    });
+    try {
+      const r = await this.d.runner.run(argv, { onOutput, timeoutMs: 10 * 60_000 });
+      return {
+        code: r.code,
+        timedOut: r.timedOut,
+        stderrTail: this.clean(r.stderr).slice(-1500),
+        argv: redactArgv(argv),
+      };
+    } finally {
+      this.d.containers.invalidate();
+      this.invalidate();
+    }
+  }
+
   // ---- drift gate (RT-01) -----------------------------------------------------------------
 
-  /** Compares `compose config --hash` of each service with the running containers' labels. */
-  async checkDrift(target: ComposeTarget, services: string[]): Promise<DriftEntry[]> {
+  /** Wanted `compose config --hash` per service (RT-01). */
+  async configHashes(target: ComposeTarget, services: string[]): Promise<Map<string, string>> {
     const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', hash: services }), {
       timeoutMs: 60_000,
     });
@@ -266,6 +324,12 @@ export class ComposeService implements Recreator {
       const m = /^(\S+)\s+([0-9a-f]{16,})\s*$/.exec(line.trim());
       if (m?.[1] && m[2]) wanted.set(m[1], m[2]);
     }
+    return wanted;
+  }
+
+  /** Compares `compose config --hash` of each service with the running containers' labels. */
+  async checkDrift(target: ComposeTarget, services: string[]): Promise<DriftEntry[]> {
+    const wanted = await this.configHashes(target, services);
     const containers = await this.rawContainers(target.projectName);
     const drift: DriftEntry[] = [];
     for (const svc of services.length ? services : [...wanted.keys()]) {
