@@ -56,14 +56,21 @@ export interface DockerHandle {
  * authorised mutations and (2) API version negotiation. The first request is unversioned
  * (`GET /version`), after which the negotiated version prefix is pinned.
  */
-export async function connectDocker(config: Pick<Config, 'dockerSocket'>, guard: Guard): Promise<DockerHandle> {
+export async function connectDocker(
+  config: Pick<Config, 'dockerSocket'>,
+  guard: Guard,
+): Promise<DockerHandle> {
   const docker = new Docker({ socketPath: config.dockerSocket });
   enforceOnModem(docker.modem as never, guard);
   let v: Awaited<ReturnType<Docker['version']>>;
   try {
     v = (await docker.version()) as typeof v;
   } catch (e) {
-    throw new AppError(503, 'docker_unavailable', `Cannot reach the Docker daemon at ${config.dockerSocket}: ${(e as Error).message}`);
+    throw new AppError(
+      503,
+      'docker_unavailable',
+      `Cannot reach the Docker daemon at ${config.dockerSocket}: ${(e as Error).message}`,
+    );
   }
   const extra = v as unknown as { MinAPIVersion?: string };
   const chosen = negotiateApiVersion({ ApiVersion: v.ApiVersion, MinAPIVersion: extra.MinAPIVersion });

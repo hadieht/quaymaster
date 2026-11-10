@@ -61,7 +61,8 @@ class Conn implements SseConnection {
     raw.on('error', () => this.finish());
     this.heartbeat = setInterval(() => this.write(': ping\n\n'), limits.heartbeatMs);
     this.revalidate = setInterval(() => {
-      if (!this.auth.stillValid(this.ctx.session.id_hash, this.ctx.user.role as Role)) this.close('session ended');
+      if (!this.auth.stillValid(this.ctx.session.id_hash, this.ctx.user.role as Role))
+        this.close('session ended');
     }, limits.revalidateMs);
     // absolute lifetime never exceeds the session's own absolute timeout
     this.expiry = setTimeout(() => this.close('session expired'), Math.max(1000, absoluteMs));
@@ -155,9 +156,15 @@ export class SseHub extends EventEmitter {
   }
 
   open(_req: FastifyRequest, reply: FastifyReply, ctx: AuthContext): SseConnection {
-    const perSession = [...this.streams.values()].filter((s) => s.sessionIdHash === ctx.session.id_hash).length;
+    const perSession = [...this.streams.values()].filter(
+      (s) => s.sessionIdHash === ctx.session.id_hash,
+    ).length;
     if (perSession >= this.limits.maxPerSession) {
-      throw new AppError(429, 'rate_limited', `At most ${this.limits.maxPerSession} live streams per session`);
+      throw new AppError(
+        429,
+        'rate_limited',
+        `At most ${this.limits.maxPerSession} live streams per session`,
+      );
     }
     if (this.streams.size >= this.limits.maxTotal) {
       throw new AppError(429, 'rate_limited', 'Too many live streams on this server');
@@ -173,7 +180,12 @@ export class SseHub extends EventEmitter {
     reply.raw.write(': connected\n\n');
     const remaining = ctx.session.expires_at - Date.now();
     const conn = new Conn(reply, this, ctx, this.limits, this.auth, remaining);
-    this.streams.set(conn.id, { conn, sessionIdHash: ctx.session.id_hash, userId: ctx.user.id, role: ctx.user.role });
+    this.streams.set(conn.id, {
+      conn,
+      sessionIdHash: ctx.session.id_hash,
+      userId: ctx.user.id,
+      role: ctx.user.role,
+    });
     return conn;
   }
 

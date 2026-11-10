@@ -199,7 +199,8 @@ const ASSIGN_RE = /(^|[\s;&|(,{"'])([A-Za-z_][\w.-]*)=("[^"]*"|'[^']*'|[^\s;&|)'
 // curl-style "-u user:password"
 const USER_FLAG_RE = /(^|\s)(-u|--user|--proxy-user)([ =])([^\s:'"]+):("[^"]*"|'[^']*'|\S+)/g;
 // HTTP header style "X-Token: value" / "api_key: value"
-const HEADER_RE = /(^|[\s{"',(])([A-Za-z][\w.-]*)(:[ \t]+)(?!Bearer\b|Basic\b)("[^"]*"|'[^']*'|[^\s"',;)}]+)/g;
+const HEADER_RE =
+  /(^|[\s{"',(])([A-Za-z][\w.-]*)(:[ \t]+)(?!Bearer\b|Basic\b)("[^"]*"|'[^']*'|[^\s"',;)}]+)/g;
 const JSON_PAIR_RE = /(["'])([A-Za-z_][\w.-]*)\1\s*:\s*(["'])((?:(?!\3).)*)\3/g;
 
 function unquote(v: string): string {
@@ -408,10 +409,22 @@ function walk(
   if (typeof v === 'object') {
     const out: Record<string, unknown> = {};
     for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-      if (envish && typeof val === 'string' && opts.redactAllEnv && ALL_ENV_KEYS.has(lk ?? '') && val !== '') {
+      if (
+        envish &&
+        typeof val === 'string' &&
+        opts.redactAllEnv &&
+        ALL_ENV_KEYS.has(lk ?? '') &&
+        val !== ''
+      ) {
         opts.sink?.(val);
         out[k] = MASK;
-      } else if (envish && typeof val === 'string' && !childForce && !isSecretKey(k) && looksLikeSecretValue(val)) {
+      } else if (
+        envish &&
+        typeof val === 'string' &&
+        !childForce &&
+        !isSecretKey(k) &&
+        looksLikeSecretValue(val)
+      ) {
         opts.sink?.(val);
         out[k] = MASK;
       } else if (isDefinitionMap && val !== null && typeof val === 'object' && !Array.isArray(val)) {
@@ -427,7 +440,10 @@ function walk(
 }
 
 /** Redacts the values of a labels map (entropy rule applies: labels are free-form). */
-export function redactLabels(labels: Record<string, string>, opts: RedactOptions = {}): Record<string, string> {
+export function redactLabels(
+  labels: Record<string, string>,
+  opts: RedactOptions = {},
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(labels)) {
     if (v === '' || v === MASK) out[k] = v;

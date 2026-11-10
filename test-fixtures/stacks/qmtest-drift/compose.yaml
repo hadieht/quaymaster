@@ -1,0 +1,21 @@
+# Drift fixture: the integration test rewrites this file to prove the config-hash gate (RT-01),
+# then restores it. It is not started by up.sh.
+name: qmtest-drift
+
+services:
+  web:
+    image: alpine:latest
+    pull_policy: never
+    init: true
+    stop_grace_period: 2s
+    command: ['sh', '-c', 'exec sleep 3600']
+    environment:
+      APP_VERSION: "1"
+    labels:
+      quaymaster.test: 'true'
+
+networks:
+  default:
+    name: qmtest-drift_default
+    labels:
+      quaymaster.test: 'true'

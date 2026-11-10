@@ -92,14 +92,7 @@ export interface ContainerSummary {
 }
 
 export type ContainerAction =
-  | 'start'
-  | 'stop'
-  | 'restart'
-  | 'kill'
-  | 'pause'
-  | 'unpause'
-  | 'remove'
-  | 'recreate';
+  'start' | 'stop' | 'restart' | 'kill' | 'pause' | 'unpause' | 'remove' | 'recreate';
 
 export interface ActionRequest {
   /** Must equal the container/project name for destructive actions (remove, recreate, down). */

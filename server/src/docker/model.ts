@@ -17,7 +17,15 @@ export const LABEL = {
   image: 'com.docker.compose.image',
 } as const;
 
-const STATES = new Set<ContainerState>(['created', 'running', 'paused', 'restarting', 'removing', 'exited', 'dead']);
+const STATES = new Set<ContainerState>([
+  'created',
+  'running',
+  'paused',
+  'restarting',
+  'removing',
+  'exited',
+  'dead',
+]);
 
 export function normState(s: string | undefined): ContainerState {
   const v = (s ?? '').toLowerCase() as ContainerState;

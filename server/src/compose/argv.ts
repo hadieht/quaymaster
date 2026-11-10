@@ -50,8 +50,11 @@ function validateName(kind: string, value: string, re: RegExp): void {
 export function buildComposeArgv(t: ComposeTarget, cmd: ComposeCommand): string[] {
   validateName('project', t.projectName, PROJECT_NAME_RE);
   if (t.files.length === 0) throw new AppError(400, 'validation', 'No compose files');
-  for (const f of t.files) if (!f.startsWith('/') || f.includes('\0')) throw new AppError(400, 'validation', 'Compose file path must be absolute');
-  if (!t.workingDir.startsWith('/')) throw new AppError(400, 'validation', 'Project directory must be absolute');
+  for (const f of t.files)
+    if (!f.startsWith('/') || f.includes('\0'))
+      throw new AppError(400, 'validation', 'Compose file path must be absolute');
+  if (!t.workingDir.startsWith('/'))
+    throw new AppError(400, 'validation', 'Project directory must be absolute');
   const base = [
     'compose',
     '--ansi=never',

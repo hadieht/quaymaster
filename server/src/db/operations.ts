@@ -20,12 +20,27 @@ const MAX_OUTPUT = 256 * 1024;
 export class OperationsRepo {
   constructor(private readonly db: Db) {}
 
-  create(op: { id: string; kind: string; target: string; actor: string; params: unknown; composeVersion: string | null }): void {
+  create(op: {
+    id: string;
+    kind: string;
+    target: string;
+    actor: string;
+    params: unknown;
+    composeVersion: string | null;
+  }): void {
     this.db
       .prepare(
         "INSERT INTO operations (id, kind, target, status, actor, started_at, compose_version, params) VALUES (?,?,?,'running',?,?,?,?)",
       )
-      .run(op.id, op.kind, op.target, op.actor, Date.now(), op.composeVersion, JSON.stringify(op.params ?? null));
+      .run(
+        op.id,
+        op.kind,
+        op.target,
+        op.actor,
+        Date.now(),
+        op.composeVersion,
+        JSON.stringify(op.params ?? null),
+      );
   }
 
   appendOutput(id: string, text: string): void {
@@ -47,9 +62,9 @@ export class OperationsRepo {
   }
 
   list(limit: number): OperationInfo[] {
-    return (this.db.prepare('SELECT * FROM operations ORDER BY started_at DESC LIMIT ?').all(limit) as OpRow[]).map(
-      toInfo,
-    );
+    return (
+      this.db.prepare('SELECT * FROM operations ORDER BY started_at DESC LIMIT ?').all(limit) as OpRow[]
+    ).map(toInfo);
   }
 
   /** Startup: operations left `running` by a crash are marked failed/interrupted (never resumed). */

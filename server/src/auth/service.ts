@@ -76,7 +76,11 @@ export class AuthService {
   // ---- sessions ---------------------------------------------------------------------------
 
   /** Creates a brand-new session (new random ID every time: rotation on login). */
-  createSession(user: UserRow, ip: string | null, userAgent: string | null): { token: string; ctx: AuthContext } {
+  createSession(
+    user: UserRow,
+    ip: string | null,
+    userAgent: string | null,
+  ): { token: string; ctx: AuthContext } {
     const token = randomBytes(32).toString('base64url');
     const now = this.clock();
     const row: SessionRow = {
@@ -211,7 +215,12 @@ export class AuthService {
 
   // ---- users ------------------------------------------------------------------------------
 
-  async createUser(input: { username: string; password: string; role: Role; logsRead?: boolean }): Promise<UserRow> {
+  async createUser(input: {
+    username: string;
+    password: string;
+    role: Role;
+    logsRead?: boolean;
+  }): Promise<UserRow> {
     AuthService.validateUsername(input.username);
     PasswordService.validateStrength(input.password);
     if (this.d.users.byUsername(input.username)) throw conflict('conflict', 'Username already exists');

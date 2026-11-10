@@ -39,7 +39,8 @@ export class LogDemuxer {
       if (this.buf.length < 8 + size) return;
       const payload = this.buf.subarray(8, 8 + size).toString('utf8');
       this.buf = this.buf.subarray(8 + size);
-      if (type === 0) this.text('stdout', payload); // stdin echo treated as stdout
+      if (type === 0)
+        this.text('stdout', payload); // stdin echo treated as stdout
       else this.text(type === 1 ? 'stdout' : 'stderr', payload);
     }
   }
@@ -65,7 +66,11 @@ export class LogDemuxer {
         text = m[2] ?? '';
       }
     }
-    this.onLine({ stream, ts, text: text.length > MAX_LINE_BYTES ? text.slice(0, MAX_LINE_BYTES) + '…' : text });
+    this.onLine({
+      stream,
+      ts,
+      text: text.length > MAX_LINE_BYTES ? text.slice(0, MAX_LINE_BYTES) + '…' : text,
+    });
   }
 
   flush(): void {

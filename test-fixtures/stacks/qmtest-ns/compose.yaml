@@ -1,0 +1,26 @@
+# Namespace-sharing fixture (RT-11): `consumer` runs inside the network namespace of `provider`.
+# Recreating `provider` alone would orphan `consumer`; Quaymaster must demand a confirmation.
+# Not started by up.sh; the integration test starts and removes it.
+name: qmtest-ns
+
+services:
+  provider:
+    image: alpine:latest
+    pull_policy: never
+    init: true
+    stop_grace_period: 2s
+    command: ['sh', '-c', 'exec sleep 3600']
+    labels:
+      quaymaster.test: 'true'
+
+  consumer:
+    image: alpine:latest
+    pull_policy: never
+    init: true
+    stop_grace_period: 2s
+    command: ['sh', '-c', 'exec sleep 3600']
+    network_mode: 'service:provider'
+    depends_on:
+      - provider
+    labels:
+      quaymaster.test: 'true'

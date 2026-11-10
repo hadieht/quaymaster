@@ -149,7 +149,9 @@ export class EventWatcher extends EventEmitter {
     this.stopped = false;
     const last = this.d.repo.lastTimestamp();
     if (last) this.lastSeenSec = Math.floor(last / 1000);
-    await this.snapshot(false).catch((e: unknown) => this.d.log.warn({ err: e }, 'initial inventory snapshot failed'));
+    await this.snapshot(false).catch((e: unknown) =>
+      this.d.log.warn({ err: e }, 'initial inventory snapshot failed'),
+    );
     await this.connect();
   }
 
@@ -226,7 +228,9 @@ export class EventWatcher extends EventEmitter {
     const wait = schedule[Math.min(this.attempt++, schedule.length - 1)] ?? 30000;
     this.reconnectTimer = setTimeout(() => {
       void (async () => {
-        await this.snapshot(true).catch((e: unknown) => this.d.log.warn({ err: e }, 'resync after reconnect failed'));
+        await this.snapshot(true).catch((e: unknown) =>
+          this.d.log.warn({ err: e }, 'resync after reconnect failed'),
+        );
         await this.connect();
       })();
     }, wait);

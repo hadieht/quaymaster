@@ -21,9 +21,15 @@ export class HashGate {
   async run<T>(fn: () => Promise<T>): Promise<T> {
     if (this.active >= this.concurrency) {
       if (this.waiters.length >= this.maxQueue) {
-        throw new AppError(429, 'rate_limited', 'Too many concurrent login attempts, try again shortly', undefined, {
-          'Retry-After': '5',
-        });
+        throw new AppError(
+          429,
+          'rate_limited',
+          'Too many concurrent login attempts, try again shortly',
+          undefined,
+          {
+            'Retry-After': '5',
+          },
+        );
       }
       await new Promise<void>((resolve) => this.waiters.push(resolve));
     } else {
@@ -81,7 +87,11 @@ export class PasswordService {
 
   static validateStrength(password: string): void {
     if (password.length < MIN_PASSWORD_LENGTH) {
-      throw new AppError(400, 'validation', `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`);
+      throw new AppError(
+        400,
+        'validation',
+        `Password must be at least ${MIN_PASSWORD_LENGTH} characters long`,
+      );
     }
     if (password.length > 1024) throw new AppError(400, 'validation', 'Password is too long');
   }

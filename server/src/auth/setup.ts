@@ -111,7 +111,11 @@ export class SetupService {
       throw new AppError(403, 'forbidden', 'Setup token expired; restart Quaymaster to issue a new one');
     }
     if (!safeEqual(input.token, this.token)) throw new AppError(403, 'forbidden', 'Invalid setup token');
-    const user = await this.d.auth.createUser({ username: input.username, password: input.password, role: 'admin' });
+    const user = await this.d.auth.createUser({
+      username: input.username,
+      password: input.password,
+      role: 'admin',
+    });
     this.token = null;
     this.removeFile();
     clearTimeout(this.timer);

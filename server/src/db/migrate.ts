@@ -146,7 +146,9 @@ export function runMigrations(db: Db, opts: { backupDir?: string; migrations?: M
     `CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at INTEGER NOT NULL)`,
   );
   const applied = new Set(
-    (db.prepare('SELECT version FROM schema_migrations').all() as { version: number }[]).map((r) => r.version),
+    (db.prepare('SELECT version FROM schema_migrations').all() as { version: number }[]).map(
+      (r) => r.version,
+    ),
   );
   const newest = Math.max(0, ...migrations.map((m) => m.version));
   const dbNewest = Math.max(0, ...applied);

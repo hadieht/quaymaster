@@ -47,8 +47,9 @@ export class ComposeRunner {
   }
 
   /** Runs an already-built argv (everything after the docker binary). */
-  run(argv: readonly string[], opts: RunOptions = {}): Promise<RunResult> {
-    if (argv[0] !== 'compose') throw new AppError(500, 'internal', 'Runner only executes `docker compose` commands');
+  async run(argv: readonly string[], opts: RunOptions = {}): Promise<RunResult> {
+    if (argv[0] !== 'compose')
+      throw new AppError(500, 'internal', 'Runner only executes `docker compose` commands');
     const sub = subcommandOf(argv);
     this.d.guard.assertComposeSubcommand(sub);
     assertSafeArgv(argv, { allowForceRecreate: argv.includes('--force-recreate') });

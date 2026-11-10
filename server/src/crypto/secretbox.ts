@@ -14,7 +14,9 @@ export class SecretBox {
 
   constructor(masterKey: Buffer) {
     if (masterKey.length < 32) throw new Error('secret key must be at least 32 bytes');
-    this.key = Buffer.from(hkdfSync('sha256', masterKey, Buffer.from('quaymaster'), Buffer.from('secrets-v1'), 32));
+    this.key = Buffer.from(
+      hkdfSync('sha256', masterKey, Buffer.from('quaymaster'), Buffer.from('secrets-v1'), 32),
+    );
     this.keyId = createHash('sha256').update(this.key).digest('hex').slice(0, 8);
   }
 
@@ -23,7 +25,13 @@ export class SecretBox {
     const c = createCipheriv('aes-256-gcm', this.key, iv);
     c.setAAD(Buffer.from(aad));
     const ct = Buffer.concat([c.update(plaintext, 'utf8'), c.final()]);
-    return ['v1', this.keyId, iv.toString('base64url'), c.getAuthTag().toString('base64url'), ct.toString('base64url')].join('.');
+    return [
+      'v1',
+      this.keyId,
+      iv.toString('base64url'),
+      c.getAuthTag().toString('base64url'),
+      ct.toString('base64url'),
+    ].join('.');
   }
 
   decrypt(payload: string, aad: string): string {

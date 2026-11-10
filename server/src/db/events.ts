@@ -46,19 +46,39 @@ export class EventsRepo {
     return ids;
   }
 
-  list(opts: { limit: number; beforeId?: number; sinceId?: number; containerId?: string; project?: string }): DockerEventRecord[] {
+  list(opts: {
+    limit: number;
+    beforeId?: number;
+    sinceId?: number;
+    containerId?: string;
+    project?: string;
+  }): DockerEventRecord[] {
     const where: string[] = [];
     const args: unknown[] = [];
-    if (opts.beforeId) (where.push('id < ?'), args.push(opts.beforeId));
-    if (opts.sinceId) (where.push('id > ?'), args.push(opts.sinceId));
-    if (opts.containerId) (where.push('actor_id = ?'), args.push(opts.containerId));
-    if (opts.project) (where.push('project = ?'), args.push(opts.project));
+    if (opts.beforeId) {
+      where.push('id < ?');
+      args.push(opts.beforeId);
+    }
+    if (opts.sinceId) {
+      where.push('id > ?');
+      args.push(opts.sinceId);
+    }
+    if (opts.containerId) {
+      where.push('actor_id = ?');
+      args.push(opts.containerId);
+    }
+    if (opts.project) {
+      where.push('project = ?');
+      args.push(opts.project);
+    }
     const sql = `SELECT * FROM events ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY id DESC LIMIT ?`;
     return (this.db.prepare(sql).all(...args, opts.limit) as EventRow[]).map(toRecord);
   }
 
   lastTimestamp(): number | null {
-    const r = this.db.prepare('SELECT MAX(ts) AS t FROM events WHERE synthetic = 0').get() as { t: number | null };
+    const r = this.db.prepare('SELECT MAX(ts) AS t FROM events WHERE synthetic = 0').get() as {
+      t: number | null;
+    };
     return r.t;
   }
 

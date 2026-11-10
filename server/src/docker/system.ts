@@ -46,10 +46,17 @@ export class DiskUsageService {
 
   private dial<T>(type: DfType): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      (this.d.docker.modem as unknown as {
-        dial(o: object, cb: (e: unknown, data: T) => void): void;
-      }).dial(
-        { path: `/system/df?type=${type}`, method: 'GET', statusCodes: { 200: true, 400: 'bad parameter', 500: 'server error' } },
+      (
+        this.d.docker.modem as unknown as {
+          dial(o: object, cb: (e: unknown, data: T) => void): void;
+        }
+      ).dial(
+        {
+          path: '/system/df?',
+          method: 'GET',
+          options: { type },
+          statusCodes: { 200: true, 400: 'bad parameter', 500: 'server error' },
+        },
         (e, data) => (e ? reject(mapDockerError(e)) : resolve(data)),
       );
     });
@@ -76,10 +83,15 @@ export class DiskUsageService {
           unusedCount: (images.Images ?? []).filter((i) => i.Containers === 0).length,
         },
         containers: Object.fromEntries(
-          (containers.Containers ?? []).map((c) => [c.Id, { sizeRw: c.SizeRw ?? 0, sizeRootFs: c.SizeRootFs ?? 0 }]),
+          (containers.Containers ?? []).map((c) => [
+            c.Id,
+            { sizeRw: c.SizeRw ?? 0, sizeRootFs: c.SizeRootFs ?? 0 },
+          ]),
         ),
         volumes: Object.fromEntries(
-          (volumes.Volumes ?? []).filter((x) => x.UsageData && x.UsageData.Size >= 0).map((x) => [x.Name, x.UsageData?.Size ?? 0]),
+          (volumes.Volumes ?? [])
+            .filter((x) => x.UsageData && x.UsageData.Size >= 0)
+            .map((x) => [x.Name, x.UsageData?.Size ?? 0]),
         ),
       };
       this.value = v;
@@ -160,7 +172,9 @@ export class SystemService {
         dockerRoot = { path: root, total: s.blocks * s.bsize, free: s.bavail * s.bsize };
       } catch (e) {
         dockerRootError = `cannot statfs ${root}: ${(e as NodeJS.ErrnoException).code ?? (e as Error).message}${
-          this.d.config.dockerRootMount ? '' : ' (in container mode mount the Docker root read-only and set QM_DOCKER_ROOT_MOUNT)'
+          this.d.config.dockerRootMount
+            ? ''
+            : ' (in container mode mount the Docker root read-only and set QM_DOCKER_ROOT_MOUNT)'
         }`;
       }
     }

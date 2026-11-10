@@ -86,7 +86,12 @@ export async function createContext(config: Config, options: ContextOptions = {}
   }
 }
 
-async function build(config: Config, log: Logger, options: ContextOptions, releaseLock: () => void): Promise<AppContext> {
+async function build(
+  config: Config,
+  log: Logger,
+  options: ContextOptions,
+  releaseLock: () => void,
+): Promise<AppContext> {
   const opened = openDatabase(path.join(config.dataDir, 'quaymaster.db'));
   const db = opened.db;
   const box = new SecretBox(config.secretKey);
@@ -106,7 +111,11 @@ async function build(config: Config, log: Logger, options: ContextOptions, relea
   const setup = new SetupService({ users: usersRepo, auth, passwords, config, announce: options.announce });
   const setupOutcome = await setup.init();
 
-  const guard = new Guard({ readOnly: config.readOnly, scope: config.managedScope, protectedNames: config.protectedNames });
+  const guard = new Guard({
+    readOnly: config.readOnly,
+    scope: config.managedScope,
+    protectedNames: config.protectedNames,
+  });
   const handle = await connectDocker(config, guard);
   const docker = handle.docker;
 
@@ -130,7 +139,8 @@ async function build(config: Config, log: Logger, options: ContextOptions, relea
     },
   });
   guard.setSelf(self);
-  if (self.failure) log.error({ failure: self.failure }, 'running in a container but cannot identify it: read-only mode');
+  if (self.failure)
+    log.error({ failure: self.failure }, 'running in a container but cannot identify it: read-only mode');
   else if (self.containerId) log.info({ self: self.containerName }, 'self-protection active');
 
   const system = new SystemService({ docker, config });
@@ -141,7 +151,8 @@ async function build(config: Config, log: Logger, options: ContextOptions, relea
   const containers = new ContainerService({ docker, guard, audit, config });
   const ops = new OperationManager(new OperationsRepo(db), log);
   const interrupted = ops.recover();
-  if (interrupted > 0) log.warn({ interrupted }, 'operations left running by a previous crash were marked failed (interrupted)');
+  if (interrupted > 0)
+    log.warn({ interrupted }, 'operations left running by a previous crash were marked failed (interrupted)');
   const runner = new ComposeRunner({ config, guard });
   const compose = new ComposeService({ runner, policy, guard, audit, containers, ops, config, docker, log });
   containers.setRecreator(compose);
@@ -186,15 +197,35 @@ async function build(config: Config, log: Logger, options: ContextOptions, relea
 
   let closed = false;
   return {
-    config, log, db, guard, box,
+    config,
+    log,
+    db,
+    guard,
+    box,
     secrets: new SecretStore(db, box),
     kv: new KvRepo(db),
-    audit, auditRepo, auth, usersRepo, setup, sse, handle, docker,
+    audit,
+    auditRepo,
+    auth,
+    usersRepo,
+    setup,
+    sse,
+    handle,
+    docker,
     containers,
     images: new ImageService({ docker, containers, config }),
     volumes: new VolumeService({ docker, containers, usage: disk }),
     networks: new NetworkService({ docker, containers }),
-    system, disk, eventsRepo, events, stats, statsRepo, ops, runner, policy, compose,
+    system,
+    disk,
+    eventsRepo,
+    events,
+    stats,
+    statsRepo,
+    ops,
+    runner,
+    policy,
+    compose,
     startedAt: Date.now(),
     setupOutcome,
     async shutdown() {

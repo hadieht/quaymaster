@@ -63,10 +63,18 @@ export class OperationManager {
   }): string {
     if (this.shuttingDown) throw conflict('conflict', 'Quaymaster is shutting down');
     const holder = this.locks.get(op.lockKey);
-    if (holder) throw conflict('conflict', `Another operation (${holder}) is already running on ${op.lockKey}`);
+    if (holder)
+      throw conflict('conflict', `Another operation (${holder}) is already running on ${op.lockKey}`);
     const id = randomUUID();
     this.locks.set(op.lockKey, id);
-    this.repo.create({ id, kind: op.kind, target: op.target, actor: op.actor, params: op.params, composeVersion: op.composeVersion ?? null });
+    this.repo.create({
+      id,
+      kind: op.kind,
+      target: op.target,
+      actor: op.actor,
+      params: op.params,
+      composeVersion: op.composeVersion ?? null,
+    });
     const live: Live = { emitter: new EventEmitter(), buffer: '', done: false };
     live.emitter.setMaxListeners(50);
     this.live.set(id, live);
@@ -97,7 +105,11 @@ export class OperationManager {
       }
       this.repo.finish(id, error ? 'failed' : 'succeeded', error);
       live.done = true;
-      live.emitter.emit('event', { type: 'status', status: error ? 'failed' : 'succeeded', error } satisfies OperationEvent);
+      live.emitter.emit('event', {
+        type: 'status',
+        status: error ? 'failed' : 'succeeded',
+        error,
+      } satisfies OperationEvent);
       this.locks.delete(op.lockKey);
       setTimeout(() => this.live.delete(id), 60_000).unref();
     })();

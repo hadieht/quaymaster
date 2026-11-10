@@ -43,7 +43,9 @@ export class UsersRepo {
 
   countActiveAdmins(): number {
     return (
-      this.db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND disabled=0").get() as { n: number }
+      this.db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='admin' AND disabled=0").get() as {
+        n: number;
+      }
     ).n;
   }
 
@@ -58,7 +60,9 @@ export class UsersRepo {
   }
 
   setPasswordHash(id: number, hash: string): void {
-    this.db.prepare('UPDATE users SET password_hash=?, password_changed_at=? WHERE id=?').run(hash, Date.now(), id);
+    this.db
+      .prepare('UPDATE users SET password_hash=?, password_changed_at=? WHERE id=?')
+      .run(hash, Date.now(), id);
   }
 
   delete(id: number): void {

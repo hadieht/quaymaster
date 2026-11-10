@@ -19,10 +19,36 @@ const PEM = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n----
 
 describe('isSecretKey', () => {
   it.each([
-    'PASSWORD', 'db_pass', 'MYSQL_PWD', 'client_secret', 'API_TOKEN', 'api-key', 'X-Api-Key', 'credentials',
-    'AUTHORIZATION', 'PRIVATE_KEY', 'tls.cert', 'SENTRY_DSN', 'connection_string', 'Cookie', 'SESSION_ID',
-    'HASH_SALT', 'signature', 'DISCORD_WEBHOOK', 'WG_PSK', 'SEED', 'MNEMONIC', 'passphrase', 'TOTP_OTP',
-    'bearer', 'APIKEY', 'ACCESS_KEY_ID', 'LICENSE_KEY', 'ENCRYPTION', 'HMAC_SECRET', 'traefik.tls.certresolver',
+    'PASSWORD',
+    'db_pass',
+    'MYSQL_PWD',
+    'client_secret',
+    'API_TOKEN',
+    'api-key',
+    'X-Api-Key',
+    'credentials',
+    'AUTHORIZATION',
+    'PRIVATE_KEY',
+    'tls.cert',
+    'SENTRY_DSN',
+    'connection_string',
+    'Cookie',
+    'SESSION_ID',
+    'HASH_SALT',
+    'signature',
+    'DISCORD_WEBHOOK',
+    'WG_PSK',
+    'SEED',
+    'MNEMONIC',
+    'passphrase',
+    'TOTP_OTP',
+    'bearer',
+    'APIKEY',
+    'ACCESS_KEY_ID',
+    'LICENSE_KEY',
+    'ENCRYPTION',
+    'HMAC_SECRET',
+    'traefik.tls.certresolver',
   ])('%s is secret', (k) => expect(isSecretKey(k)).toBe(true));
 
   it.each(['TZ', 'PUID', 'LANG', 'PATH', 'HOSTNAME', 'Image', 'Id', 'com.docker.compose.project', 'WORKDIR'])(
@@ -48,12 +74,16 @@ describe('looksLikeSecretValue', () => {
   });
   it('detects long high-entropy strings', () => {
     expect(looksLikeSecretValue('aZ3kQ9xLp2Wd7VbN4mTr8YcHs1UfEjGo')).toBe(true);
-    expect(looksLikeSecretValue('9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')).toBe(true);
+    expect(looksLikeSecretValue('9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')).toBe(
+      true,
+    );
   });
   it('does not flag ordinary values, digests, UUIDs', () => {
     expect(looksLikeSecretValue('Europe/Berlin')).toBe(false);
     expect(looksLikeSecretValue('/var/lib/some/very/long/path/name')).toBe(false);
-    expect(looksLikeSecretValue('sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08')).toBe(false);
+    expect(
+      looksLikeSecretValue('sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08'),
+    ).toBe(false);
     expect(looksLikeSecretValue('123e4567-e89b-12d3-a456-426614174000')).toBe(false);
     expect(looksLikeSecretValue('short')).toBe(false);
     expect(looksLikeSecretValue('this-is-a-normal-hostname-value')).toBe(false);
@@ -79,9 +109,9 @@ describe('redactUrl', () => {
     expect(redactUrl('https://hooks.slack.com/services/T000/B000/XXXXXXXX')).toBe(
       `https://hooks.slack.com/services/${MASK}/${MASK}/${MASK}`,
     );
-    expect(redactUrl('https://api.telegram.org/bot123456:ABCdefGhIJKlmNoPQRsTUVwxyZ123456789/sendMessage')).toBe(
-      `https://api.telegram.org/bot${MASK}/sendMessage`,
-    );
+    expect(
+      redactUrl('https://api.telegram.org/bot123456:ABCdefGhIJKlmNoPQRsTUVwxyZ123456789/sendMessage'),
+    ).toBe(`https://api.telegram.org/bot${MASK}/sendMessage`);
     expect(redactUrl('https://hooks.example.org/in/aZ3kQ9xLp2Wd7VbN4mTr8YcHs1UfEjGo')).toBe(
       `https://hooks.example.org/in/${MASK}`,
     );
@@ -120,7 +150,9 @@ describe('redactText', () => {
   });
   it('masks NAME=value assignments, including exec command lines of events', () => {
     expect(redactText('/bin/sh -c curl -u user:pass http://x -H X=1')).toBeTypeOf('string');
-    expect(redactText('/bin/sh -c MYSQL_PWD=sekrit mysqladmin ping')).toBe(`/bin/sh -c MYSQL_PWD=${MASK} mysqladmin ping`);
+    expect(redactText('/bin/sh -c MYSQL_PWD=sekrit mysqladmin ping')).toBe(
+      `/bin/sh -c MYSQL_PWD=${MASK} mysqladmin ping`,
+    );
     expect(redactText('DATABASE_URL=postgres://u:p@h/db?password=zz')).not.toMatch(/zz|:p@/);
   });
   it('masks JSON-ish key/value pairs', () => {
@@ -148,7 +180,12 @@ describe('env entries and argv', () => {
   });
   it('redactArgv masks the token after a secret-named flag', () => {
     expect(redactArgv(['--user', 'bob', '--password', 'x', '--port', '80'])).toEqual([
-      '--user', 'bob', '--password', MASK, '--port', '80',
+      '--user',
+      'bob',
+      '--password',
+      MASK,
+      '--port',
+      '80',
     ]);
     expect(redactArgv(['--api-key=abc'])).toEqual([`--api-key=${MASK}`]);
     expect(redactArgv(['--token', '--verbose'])).toEqual(['--token', '--verbose']);
@@ -179,13 +216,16 @@ describe('redactDeep (whole-object walk)', () => {
         Labels: { 'app.secret': 'v', 'app.note': 'ok' },
         Healthcheck: { Test: ['CMD-SHELL', 'curl -u admin:pw123 http://localhost/ || exit 1'] },
       },
-      HostConfig: { LogConfig: { Type: 'splunk', Config: { 'splunk-token': 'tok-123', 'splunk-url': 'https://u:p@s/' } } },
+      HostConfig: {
+        LogConfig: { Type: 'splunk', Config: { 'splunk-token': 'tok-123', 'splunk-url': 'https://u:p@s/' } },
+      },
       NetworkSettings: { SandboxKey: '/var/run/docker/netns/abc' },
       deep: { a: { b: { c: { dsn: 'https://k@o1.ingest.sentry.io/1' } } } },
     };
     const out = redactDeep(input);
     const s = JSON.stringify(out);
-    for (const leak of ['s3cret', 'hunter2', 'tok-123', 'pw123', ':p@', JWT, 'k@o1']) expect(s).not.toContain(leak);
+    for (const leak of ['s3cret', 'hunter2', 'tok-123', 'pw123', ':p@', JWT, 'k@o1'])
+      expect(s).not.toContain(leak);
     expect(out.Config.Env[0]).toBe('TZ=UTC');
     expect(out.Config.Labels['app.note']).toBe('ok');
     expect(out.Id).toBe('a'.repeat(64));
@@ -211,7 +251,11 @@ describe('redactDeep (whole-object walk)', () => {
       'x-common': { environment: { API_KEY: 'k-123', MODE: 'prod' } },
       services: {
         app: {
-          environment: { DATABASE_URL: 'postgres://u:pw@db/app?sslmode=require&password=qq', MODE: 'prod', BLOB: JWT },
+          environment: {
+            DATABASE_URL: 'postgres://u:pw@db/app?sslmode=require&password=qq',
+            MODE: 'prod',
+            BLOB: JWT,
+          },
           build: { args: { NPM_TOKEN: 'npm-abc', NODE_VERSION: '22' } },
           command: 'serve --password=hunter2 --port 80',
           healthcheck: { test: ['CMD', 'curl', '-u', 'a:b', '--header', 'X-Token: t0k3n', 'http://x'] },
@@ -224,7 +268,18 @@ describe('redactDeep (whole-object walk)', () => {
     };
     const out = redactDeep(cfg);
     const s = JSON.stringify(out);
-    for (const leak of ['k-123', 'pw@', 'qq', 'npm-abc', 'hunter2', 't0k3n', 'zzz', 'inline-secret-body', 'abc"', JWT]) {
+    for (const leak of [
+      'k-123',
+      'pw@',
+      'qq',
+      'npm-abc',
+      'hunter2',
+      't0k3n',
+      'zzz',
+      'inline-secret-body',
+      'abc"',
+      JWT,
+    ]) {
       expect(s, leak).not.toContain(leak);
     }
     expect(out.services.app.environment.MODE).toBe('prod');
@@ -256,7 +311,8 @@ describe('Docker event shaped data (RT-04)', () => {
   it('masks exec command lines and secret labels in actor attributes', () => {
     const ev = {
       Type: 'container',
-      Action: 'exec_start: /bin/sh -c curl -u user:pass1 --header "Authorization: Bearer abcdefgh12345678" http://x',
+      Action:
+        'exec_start: /bin/sh -c curl -u user:pass1 --header "Authorization: Bearer abcdefgh12345678" http://x',
       Actor: { ID: 'f'.repeat(64), Attributes: { name: 'web', 'app.token': 'tok-999', image: 'nginx' } },
     };
     const s = JSON.stringify(redactDeep(ev));

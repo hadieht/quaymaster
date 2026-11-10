@@ -38,7 +38,10 @@ export class PathPolicy {
     try {
       real = realpathSync(p);
     } catch {
-      return { ok: false, reason: `${p} does not exist or is not readable by Quaymaster (mount it at the same path, under QM_STACK_PATHS)` };
+      return {
+        ok: false,
+        reason: `${p} does not exist or is not readable by Quaymaster (mount it at the same path, under QM_STACK_PATHS)`,
+      };
     }
     const dr = this.dockerRoot();
     if (dr) {

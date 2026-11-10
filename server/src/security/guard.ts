@@ -27,7 +27,10 @@ export const NO_SELF: SelfInfo = {
 };
 
 export function globToRegExp(glob: string): RegExp {
-  const esc = glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+  const esc = glob
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
   return new RegExp(`^${esc}$`, 'i');
 }
 
@@ -126,7 +129,9 @@ export class Guard {
   }
 
   /** Why mutating this container is refused right now, in priority order. Null = allowed. */
-  containerRefusal(c: ContainerRef): { code: 'read_only' | 'out_of_scope' | 'self_protected'; message: string } | null {
+  containerRefusal(
+    c: ContainerRef,
+  ): { code: 'read_only' | 'out_of_scope' | 'self_protected'; message: string } | null {
     const ro = this.readOnlyReason;
     if (ro) return { code: 'read_only', message: `Read-only mode: ${ro}` };
     const prot = this.containerProtectedReason(c);
@@ -252,12 +257,19 @@ export function checkEngineRequest(
     throw new AppError(403, 'unsupported', `Engine call ${m} ${pathOnly} is not on the allow-list`);
   }
   if (!permit || permit.containerId !== id || permit.action !== action) {
-    throw new AppError(403, 'internal', `Engine mutation ${m} ${pathOnly} was not authorised by the service layer`);
+    throw new AppError(
+      403,
+      'internal',
+      `Engine mutation ${m} ${pathOnly} was not authorised by the service layer`,
+    );
   }
 }
 
 interface ModemLike {
-  dial: (options: { method?: string; path?: string }, callback: (err: unknown, data?: unknown) => void) => void;
+  dial: (
+    options: { method?: string; path?: string },
+    callback: (err: unknown, data?: unknown) => void,
+  ) => void;
 }
 
 /** Wraps a dockerode modem so every request passes `checkEngineRequest` before any network I/O. */

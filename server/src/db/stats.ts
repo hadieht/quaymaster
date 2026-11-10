@@ -51,11 +51,14 @@ export class StatsRepo {
 export class KvRepo {
   constructor(private readonly db: Db) {}
   get(key: string): string | undefined {
-    return (this.db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    return (this.db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined)
+      ?.value;
   }
   set(key: string, value: string): void {
     this.db
-      .prepare('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .prepare(
+        'INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      )
       .run(key, value);
   }
 }
@@ -82,8 +85,7 @@ export class SecretStore {
 
   get(name: string): string | undefined {
     const r = this.db.prepare('SELECT ciphertext FROM secret_store WHERE name = ?').get(name) as
-      | { ciphertext: string }
-      | undefined;
+      { ciphertext: string } | undefined;
     return r ? this.box.decrypt(r.ciphertext, this.aad(name)) : undefined;
   }
 

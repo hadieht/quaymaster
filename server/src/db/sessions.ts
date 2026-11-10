@@ -39,7 +39,9 @@ export class SessionsRepo {
     const rows = this.db
       .prepare('SELECT id_hash FROM sessions WHERE user_id = ? AND id_hash != ?')
       .all(userId, exceptIdHash ?? '') as { id_hash: string }[];
-    this.db.prepare('DELETE FROM sessions WHERE user_id = ? AND id_hash != ?').run(userId, exceptIdHash ?? '');
+    this.db
+      .prepare('DELETE FROM sessions WHERE user_id = ? AND id_hash != ?')
+      .run(userId, exceptIdHash ?? '');
     return rows.map((r) => r.id_hash);
   }
 

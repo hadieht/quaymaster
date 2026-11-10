@@ -75,7 +75,13 @@ export function checkMutationRequest(opts: {
 
 export function parseBody<S extends ZodTypeAny>(schema: S, body: unknown): z.infer<S> {
   const r = schema.safeParse(body ?? {});
-  if (!r.success) throw new AppError(400, 'validation', 'Invalid request', r.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })));
+  if (!r.success)
+    throw new AppError(
+      400,
+      'validation',
+      'Invalid request',
+      r.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+    );
   return r.data as z.infer<S>;
 }
 
@@ -83,7 +89,9 @@ export function requirePerm(ctx: AppContext, perm: Permission) {
   return async (req: FastifyRequest): Promise<void> => {
     if (!req.auth) throw unauthorized();
     if (!ctx.auth.can(req.auth, perm)) {
-      throw forbidden(perm === 'logs' ? 'Your account may not read container logs' : 'Administrator role required');
+      throw forbidden(
+        perm === 'logs' ? 'Your account may not read container logs' : 'Administrator role required',
+      );
     }
   };
 }
@@ -98,7 +106,6 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     loggerInstance: ctx.log,
     trustProxy: config.trustProxy.length > 0 ? config.trustProxy : false,
     bodyLimit: 64 * 1024,
-    disableRequestLogging: true,
     routerOptions: { maxParamLength: 300 },
   }) as unknown as FastifyInstance;
   const origins = allowedOrigins(config);
@@ -135,57 +142,83 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     }
   });
 
-  app.setErrorHandler((err: Error & { statusCode?: number; validation?: unknown; code?: string }, req: FastifyRequest, reply: FastifyReply) => {
-    let status = 500;
-    let code: ErrorEnvelope['error']['code'] = 'internal';
-    let message = 'Internal server error';
-    let details: unknown;
-    if (err instanceof AppError) {
-      status = err.status;
-      code = err.code;
-      message = err.message;
-      details = err.details;
-      for (const [k, v] of Object.entries(err.headers ?? {})) reply.header(k, v);
-    } else if (err instanceof ZodError) {
-      status = 400;
-      code = 'validation';
-      message = 'Invalid request';
-      details = err.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
-    } else if (err.statusCode && err.statusCode >= 400 && err.statusCode < 500) {
-      status = err.statusCode;
-      code = status === 413 ? 'validation' : status === 404 ? 'not_found' : 'validation';
-      message = status === 413 ? 'Request body too large' : status === 415 ? 'Content-Type must be application/json' : 'Bad request';
-    } else {
-      req.log.error({ err }, 'unhandled error');
+  app.addHook('onSend', async (_req, reply, payload) => {
+    // Known-value scrubbing (RT-04): any literal secret learned from containers/projects is removed
+    // from every JSON response, even where it sits in free text (e.g. a command string).
+    const type = String(reply.getHeader('content-type') ?? '');
+    if (typeof payload === 'string' && type.includes('application/json') && globalScrubber.size > 0) {
+      return globalScrubber.scrub(payload);
     }
-    if (status >= 500 && !(err instanceof AppError)) message = 'Internal server error';
-    const body: ErrorEnvelope = {
-      error: {
-        code,
-        message: redactText(globalScrubber.scrub(message)),
-        ...(details !== undefined ? { details: redactDeep(details) } : {}),
-      },
-    };
-    void reply.status(status).send(body);
+    return payload;
   });
 
+  app.setErrorHandler(
+    (
+      err: Error & { statusCode?: number; validation?: unknown; code?: string },
+      req: FastifyRequest,
+      reply: FastifyReply,
+    ) => {
+      let status = 500;
+      let code: ErrorEnvelope['error']['code'] = 'internal';
+      let message = 'Internal server error';
+      let details: unknown;
+      if (err instanceof AppError) {
+        status = err.status;
+        code = err.code;
+        message = err.message;
+        details = err.details;
+        for (const [k, v] of Object.entries(err.headers ?? {})) reply.header(k, v);
+      } else if (err instanceof ZodError) {
+        status = 400;
+        code = 'validation';
+        message = 'Invalid request';
+        details = err.issues.map((i) => ({ path: i.path.join('.'), message: i.message }));
+      } else if (err.statusCode && err.statusCode >= 400 && err.statusCode < 500) {
+        status = err.statusCode;
+        code = status === 413 ? 'validation' : status === 404 ? 'not_found' : 'validation';
+        message =
+          status === 413
+            ? 'Request body too large'
+            : status === 415
+              ? 'Content-Type must be application/json'
+              : 'Bad request';
+      } else {
+        req.log.error({ err }, 'unhandled error');
+      }
+      if (status >= 500 && !(err instanceof AppError)) message = 'Internal server error';
+      const body: ErrorEnvelope = {
+        error: {
+          code,
+          message: redactText(globalScrubber.scrub(message)),
+          ...(details !== undefined ? { details: redactDeep(details) } : {}),
+        },
+      };
+      void reply.status(status).send(body);
+    },
+  );
+
   app.setNotFoundHandler((_req, reply) => {
-    void reply.status(404).send({ error: { code: 'not_found', message: 'Route not found' } } satisfies ErrorEnvelope);
+    void reply
+      .status(404)
+      .send({ error: { code: 'not_found', message: 'Route not found' } } satisfies ErrorEnvelope);
   });
 
   // RT-35: /healthz reveals nothing but liveness
   app.get('/healthz', async () => ({ status: 'ok' }));
 
   const prefix = '/api/v1';
-  await app.register(async (api) => {
-    registerAuthRoutes(api, ctx);
-    registerSystemRoutes(api, ctx);
-    registerContainerRoutes(api, ctx);
-    registerComposeRoutes(api, ctx);
-    registerInventoryRoutes(api, ctx);
-    registerMiscRoutes(api, ctx);
-    registerStreamRoutes(api, ctx);
-  }, { prefix });
+  await app.register(
+    async (api) => {
+      registerAuthRoutes(api, ctx);
+      registerSystemRoutes(api, ctx);
+      registerContainerRoutes(api, ctx);
+      registerComposeRoutes(api, ctx);
+      registerInventoryRoutes(api, ctx);
+      registerMiscRoutes(api, ctx);
+      registerStreamRoutes(api, ctx);
+    },
+    { prefix },
+  );
 
   return app;
 }

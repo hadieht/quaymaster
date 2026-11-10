@@ -20,7 +20,14 @@ const logsQuery = z.object({
   since: z.coerce.number().int().min(0).optional(),
   timestamps: z.enum(['true', 'false']).optional(),
 });
-const historyQuery = z.object({ minutes: z.coerce.number().int().min(1).max(7 * 24 * 60).default(60) });
+const historyQuery = z.object({
+  minutes: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(7 * 24 * 60)
+    .default(60),
+});
 
 export function registerContainerRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.get('/containers', async (): Promise<ContainerSummary[]> => {
@@ -32,17 +39,23 @@ export function registerContainerRoutes(app: FastifyInstance, ctx: AppContext): 
     }));
   });
 
-  app.get<{ Params: { ref: string } }>('/containers/:ref', async (req) => ctx.containers.inspect(req.params.ref));
+  app.get<{ Params: { ref: string } }>('/containers/:ref', async (req) =>
+    ctx.containers.inspect(req.params.ref),
+  );
 
-  app.get<{ Params: { ref: string } }>('/containers/:ref/logs', { preHandler: requirePerm(ctx, 'logs') }, async (req) => {
-    const q = parseBody(logsQuery, req.query);
-    const lines = await ctx.containers.logsTail(req.params.ref, {
-      tail: q.tail,
-      since: q.since,
-      timestamps: q.timestamps !== 'false',
-    });
-    return { lines };
-  });
+  app.get<{ Params: { ref: string } }>(
+    '/containers/:ref/logs',
+    { preHandler: requirePerm(ctx, 'logs') },
+    async (req) => {
+      const q = parseBody(logsQuery, req.query);
+      const lines = await ctx.containers.logsTail(req.params.ref, {
+        tail: q.tail,
+        since: q.since,
+        timestamps: q.timestamps !== 'false',
+      });
+      return { lines };
+    },
+  );
 
   app.get<{ Params: { ref: string } }>('/containers/:ref/stats', async (req) => {
     const c = await ctx.containers.resolve(req.params.ref);

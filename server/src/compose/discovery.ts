@@ -24,7 +24,10 @@ const SKIP_DIRS = new Set(['node_modules', '.git', '.cache', 'data', 'volumes'])
 
 /** Compose's default project name for a directory. */
 export function deriveProjectName(dir: string): string {
-  const base = path.basename(dir).toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  const base = path
+    .basename(dir)
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '');
   return base.replace(/^[^a-z0-9]+/, '');
 }
 
@@ -170,19 +173,28 @@ export function buildProjects(input: DiscoveryInput): ComposeProjectSummary[] {
     let workingDir: string | null = null;
     let files: string[] = [];
     if (dirs.size > 1 || fileSets.size > 1) {
-      reasons.push('conflicting labels: containers of this project disagree on working directory or config files');
+      reasons.push(
+        'conflicting labels: containers of this project disagree on working directory or config files',
+      );
     }
     const dir0 = [...dirs][0] ?? '';
     const files0 = [...fileSets][0] ?? '';
     if (!dir0 || !files0) {
-      reasons.push('containers carry no working-directory/config-file labels (not created by Docker Compose, or by an old version)');
+      reasons.push(
+        'containers carry no working-directory/config-file labels (not created by Docker Compose, or by an old version)',
+      );
     } else {
       workingDir = dir0;
-      files = files0.split(',').map((f) => f.trim()).filter(Boolean);
+      files = files0
+        .split(',')
+        .map((f) => f.trim())
+        .filter(Boolean);
     }
     const lsEntry = lsByName.get(name);
     if (lsEntry && files.length > 0) {
-      const lsFiles = lsEntry.ConfigFiles.split(',').map((f) => f.trim()).filter(Boolean);
+      const lsFiles = lsEntry.ConfigFiles.split(',')
+        .map((f) => f.trim())
+        .filter(Boolean);
       if (lsFiles.join(',') !== files.join(',') && lsFiles.length > 0) {
         reasons.push('`docker compose ls` reports different config files than the container labels');
       }
@@ -215,7 +227,9 @@ export function buildProjects(input: DiscoveryInput): ComposeProjectSummary[] {
       const svc = c.Labels?.[LABEL.service] ?? '(unknown)';
       byService.set(svc, [...(byService.get(svc) ?? []), c]);
     }
-    const services = [...byService].map(([n, l]) => aggregateService(n, l)).sort((a, b) => a.name.localeCompare(b.name));
+    const services = [...byService]
+      .map(([n, l]) => aggregateService(n, l))
+      .sort((a, b) => a.name.localeCompare(b.name));
     const level: CapabilityLevel = reasons.length === 0 ? 'full' : 'limited';
     const refusal = guard.projectRefusal(name);
     out.push({
@@ -242,7 +256,8 @@ export function buildProjects(input: DiscoveryInput): ComposeProjectSummary[] {
       if (!fc.ok) reasons.push(fc.reason);
       else if (usesRemoteResources(read(fc.real) ?? '')) reasons.push(`${f} uses remote include/extends`);
     }
-    if ((scannedByName.get(s.name)?.length ?? 0) > 1) reasons.push(`several directories in QM_STACK_PATHS map to project "${s.name}"`);
+    if ((scannedByName.get(s.name)?.length ?? 0) > 1)
+      reasons.push(`several directories in QM_STACK_PATHS map to project "${s.name}"`);
     const refusal = guard.projectRefusal(s.name);
     out.push({
       name: s.name,

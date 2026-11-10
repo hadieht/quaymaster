@@ -76,7 +76,8 @@ export class ContainerService {
 
   /** Raw list (all containers incl. stopped) with a short cache and single-flight refresh. */
   async listRaw(fresh = false): Promise<Dockerode.ContainerInfo[]> {
-    if (!fresh && this.cache && Date.now() - this.cache.at < ContainerService.CACHE_MS) return this.cache.value;
+    if (!fresh && this.cache && Date.now() - this.cache.at < ContainerService.CACHE_MS)
+      return this.cache.value;
     if (this.inflight) return this.inflight;
     this.inflight = this.d.docker
       .listContainers({ all: true })
@@ -130,7 +131,10 @@ export class ContainerService {
 
   // ---- logs -------------------------------------------------------------------------------
 
-  async logsTail(ref: string, opts: { tail?: number; since?: number; timestamps?: boolean } = {}): Promise<LogLine[]> {
+  async logsTail(
+    ref: string,
+    opts: { tail?: number; since?: number; timestamps?: boolean } = {},
+  ): Promise<LogLine[]> {
     const r = await this.resolve(ref);
     const tail = Math.min(Math.max(opts.tail ?? 200, 1), 5000);
     const buf = await this.d.docker
@@ -146,7 +150,9 @@ export class ContainerService {
       .catch((e: unknown) => {
         throw mapDockerError(e);
       });
-    const lines = demuxBuffer(buf as Buffer, r.raw.Config.Tty === true, opts.timestamps ?? true).map(cleanLogLine);
+    const lines = demuxBuffer(buf as Buffer, r.raw.Config.Tty === true, opts.timestamps ?? true).map(
+      cleanLogLine,
+    );
     // cap the response at ~2 MiB
     let size = 0;
     const out: LogLine[] = [];
@@ -178,7 +184,9 @@ export class ContainerService {
       .catch((e: unknown) => {
         throw mapDockerError(e);
       })) as NodeJS.ReadableStream & { destroy?: () => void };
-    const demux = new LogDemuxer(r.raw.Config.Tty === true, opts.timestamps ?? true, (l) => onLine(cleanLogLine(l)));
+    const demux = new LogDemuxer(r.raw.Config.Tty === true, opts.timestamps ?? true, (l) =>
+      onLine(cleanLogLine(l)),
+    );
     const pump = new RateLimitedPump(stream as never, this.d.config.sse.logBytesPerSec);
     stream.on('data', (chunk: Buffer) => {
       pump.account(chunk.length);
@@ -206,9 +214,20 @@ export class ContainerService {
 
   // ---- actions ----------------------------------------------------------------------------
 
-  async act(ref: string, action: ContainerAction, req: ActionRequest, actor: Actor): Promise<{ ok: true; operationId?: string; note?: string }> {
+  async act(
+    ref: string,
+    action: ContainerAction,
+    req: ActionRequest,
+    actor: Actor,
+  ): Promise<{ ok: true; operationId?: string; note?: string }> {
     if (!CONTAINER_ACTIONS.includes(action)) throw badRequest(`Unknown action "${action}"`);
-    const base = { actor: actor.name, ip: actor.ip, action: `container.${action}`, target: ref, params: { ...req } };
+    const base = {
+      actor: actor.name,
+      ip: actor.ip,
+      action: `container.${action}`,
+      target: ref,
+      params: { ...req },
+    };
     return audited(this.d.audit, base, async () => {
       const c = await this.resolve(ref);
       // identity is now known: record the real target, not what the caller typed
@@ -216,7 +235,9 @@ export class ContainerService {
       this.d.guard.assertContainer({ id: c.id, name: c.name, project: c.project }, action);
 
       if ((action === 'remove' || action === 'recreate') && req.confirm !== c.name) {
-        throw new AppError(409, 'confirmation_required', `Confirm by sending {"confirm":"${c.name}"}`, { expected: c.name });
+        throw new AppError(409, 'confirmation_required', `Confirm by sending {"confirm":"${c.name}"}`, {
+          expected: c.name,
+        });
       }
       if (action === 'kill' && req.signal !== undefined && !/^(SIG)?[A-Z0-9]{1,10}$/.test(req.signal)) {
         throw badRequest('Invalid signal');
@@ -239,11 +260,13 @@ export class ContainerService {
       // destructive: make sure the ID still carries the name we checked (another tool may have renamed it)
       if (action === 'remove' || action === 'kill') {
         const again = await this.resolve(c.id);
-        if (again.name !== c.name) throw conflict('conflict', 'Container was renamed while the action was pending');
+        if (again.name !== c.name)
+          throw conflict('conflict', 'Container was renamed while the action was pending');
       }
 
       const handle = this.d.docker.getContainer(c.id);
-      const timeout = req.timeoutSeconds !== undefined ? Math.min(Math.max(req.timeoutSeconds, 0), 600) : undefined;
+      const timeout =
+        req.timeoutSeconds !== undefined ? Math.min(Math.max(req.timeoutSeconds, 0), 600) : undefined;
       let note: string | undefined;
       try {
         await withPermit({ containerId: c.id, action }, async () => {

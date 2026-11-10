@@ -121,9 +121,15 @@ export class ComposeService implements Recreator {
     const hit = this.configCache.get(name);
     if (!fresh && hit && Date.now() - hit.at < CONFIG_CACHE_MS) return hit;
     const target = this.fullTarget(await this.summary(name));
-    const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', format: 'json' }), { timeoutMs: 60_000 });
+    const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', format: 'json' }), {
+      timeoutMs: 60_000,
+    });
     if (r.code !== 0) {
-      throw new AppError(422, 'compose_failed', `docker compose config failed: ${this.clean(r.stderr).slice(-2000)}`);
+      throw new AppError(
+        422,
+        'compose_failed',
+        `docker compose config failed: ${this.clean(r.stderr).slice(-2000)}`,
+      );
     }
     let config: ResolvedConfig;
     try {
@@ -132,7 +138,11 @@ export class ComposeService implements Recreator {
       throw new AppError(502, 'compose_failed', 'docker compose config returned invalid JSON');
     }
     learnSecrets(config, this.d.config.redactAllEnv);
-    const entry = { at: Date.now(), config, warnings: unsetVariableWarnings(r.stderr).map((w) => this.clean(w)) };
+    const entry = {
+      at: Date.now(),
+      config,
+      warnings: unsetVariableWarnings(r.stderr).map((w) => this.clean(w)),
+    };
     this.configCache.set(name, entry);
     return entry;
   }
@@ -148,7 +158,9 @@ export class ComposeService implements Recreator {
 
   async validate(name: string): Promise<ValidationResult> {
     const target = this.fullTarget(await this.summary(name));
-    const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', validateOnly: true }), { timeoutMs: 60_000 });
+    const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', validateOnly: true }), {
+      timeoutMs: 60_000,
+    });
     const warnings = unsetVariableWarnings(r.stderr).map((w) => this.clean(w));
     const errors: string[] = [];
     if (r.code !== 0) errors.push(this.clean(r.stderr.trim()).slice(-2000) || `exit code ${r.code}`);
@@ -161,7 +173,9 @@ export class ComposeService implements Recreator {
   /** Checks env_file / secret / config file paths of the *resolved* project against QM_STACK_PATHS. */
   private async fileReferenceProblems(target: ComposeTarget): Promise<string[]> {
     const problems: string[] = [];
-    const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', noEnvResolution: true }), { timeoutMs: 60_000 });
+    const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', noEnvResolution: true }), {
+      timeoutMs: 60_000,
+    });
     if (r.code !== 0) return problems;
     let cfg: ResolvedConfig & { services?: Record<string, { env_file?: unknown }> };
     try {
@@ -200,10 +214,24 @@ export class ComposeService implements Recreator {
         const graph = buildGraph(config);
         const running = new Map(summary.services.map((s) => [s.name, s]));
         const services: ComposeServiceInfo[] = Object.entries(config.services ?? {})
-          .map(([n, svc]) => running.get(n) ?? { name: n, image: svc.image ?? null, containers: [], status: 'not-created' as const, replicas: 0 })
+          .map(
+            ([n, svc]) =>
+              running.get(n) ?? {
+                name: n,
+                image: svc.image ?? null,
+                containers: [],
+                status: 'not-created' as const,
+                replicas: 0,
+              },
+          )
           .sort((a, b) => a.name.localeCompare(b.name));
         for (const s of summary.services) if (!services.some((x) => x.name === s.name)) services.push(s);
-        return { summary, graph, services, namespaceProviders: Object.fromEntries(namespaceProviders(graph)) };
+        return {
+          summary,
+          graph,
+          services,
+          namespaceProviders: Object.fromEntries(namespaceProviders(graph)),
+        };
       } catch (e) {
         if (!(e instanceof AppError) || e.code !== 'compose_failed') throw e;
         // fall through to the label-based view when the file does not resolve
@@ -211,16 +239,27 @@ export class ComposeService implements Recreator {
       }
     }
     const graph = graphFromLabels(rawContainers);
-    return { summary, graph, services: summary.services, namespaceProviders: Object.fromEntries(namespaceProviders(graph)) };
+    return {
+      summary,
+      graph,
+      services: summary.services,
+      namespaceProviders: Object.fromEntries(namespaceProviders(graph)),
+    };
   }
 
   // ---- drift gate (RT-01) -----------------------------------------------------------------
 
   /** Compares `compose config --hash` of each service with the running containers' labels. */
   async checkDrift(target: ComposeTarget, services: string[]): Promise<DriftEntry[]> {
-    const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', hash: services }), { timeoutMs: 60_000 });
+    const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', hash: services }), {
+      timeoutMs: 60_000,
+    });
     if (r.code !== 0) {
-      throw new AppError(422, 'compose_failed', `cannot compute configuration hash: ${this.clean(r.stderr).slice(-1000)}`);
+      throw new AppError(
+        422,
+        'compose_failed',
+        `cannot compute configuration hash: ${this.clean(r.stderr).slice(-1000)}`,
+      );
     }
     const wanted = new Map<string, string>();
     for (const line of r.stdout.split('\n')) {
@@ -243,7 +282,12 @@ export class ComposeService implements Recreator {
 
   // ---- operations -------------------------------------------------------------------------
 
-  async operate(name: string, action: ComposeAction, req: ComposeActionRequest, actor: Actor): Promise<{ operationId: string }> {
+  async operate(
+    name: string,
+    action: ComposeAction,
+    req: ComposeActionRequest,
+    actor: Actor,
+  ): Promise<{ operationId: string }> {
     const service = req.service;
     if (service !== undefined && !SERVICE_NAME_RE.test(service)) throw badRequest('Invalid service name');
     const base = {
@@ -255,7 +299,11 @@ export class ComposeService implements Recreator {
     };
     const deny = (e: unknown): never => {
       const status = (e as { status?: number }).status;
-      this.d.audit.record({ ...base, params: { ...req, error: (e as Error).message }, outcome: status === 409 || status === 403 ? 'denied' : 'failure' });
+      this.d.audit.record({
+        ...base,
+        params: { ...req, error: (e as Error).message },
+        outcome: status === 409 || status === 403 ? 'denied' : 'failure',
+      });
       throw e;
     };
     try {
@@ -274,7 +322,8 @@ export class ComposeService implements Recreator {
   ): Promise<{ operationId: string }> {
     const summary = await this.summary(name);
     const service = req.service;
-    if (service && summary.level !== 'full' && !summary.services.some((s) => s.name === service)) throw notFound('Service');
+    if (service && summary.level !== 'full' && !summary.services.some((s) => s.name === service))
+      throw notFound('Service');
 
     // ---- limited projects: container-level start/stop/restart only (spec 4.2)
     if (summary.level !== 'full') {
@@ -307,12 +356,16 @@ export class ComposeService implements Recreator {
     }
 
     if (needsConfig && cfg && cfg.warnings.length > 0) {
-      throw new AppError(409, 'validation', 'Compose reports unset variables (treated as an error)', { warnings: cfg.warnings });
+      throw new AppError(409, 'validation', 'Compose reports unset variables (treated as an error)', {
+        warnings: cfg.warnings,
+      });
     }
 
     const destructive = action === 'down' || (action === 'redeploy' && req.forceRecreate === true);
     if (destructive && req.confirm !== name) {
-      throw new AppError(409, 'confirmation_required', `Confirm by sending {"confirm":"${name}"}`, { expected: name });
+      throw new AppError(409, 'confirmation_required', `Confirm by sending {"confirm":"${name}"}`, {
+        expected: name,
+      });
     }
 
     if (needsConfig && cfg) {
@@ -340,7 +393,11 @@ export class ComposeService implements Recreator {
           {
             services: drift,
             redactedConfig: redactDeep(
-              { services: Object.fromEntries(drift.map((d) => [d.service, cfg?.config.services?.[d.service]])) },
+              {
+                services: Object.fromEntries(
+                  drift.map((d) => [d.service, cfg?.config.services?.[d.service]]),
+                ),
+              },
               { redactAllEnv: this.d.config.redactAllEnv },
             ),
             field: 'applyDrift',
@@ -385,11 +442,25 @@ export class ComposeService implements Recreator {
         try {
           const r = await this.d.runner.run(argv, { onOutput: (c) => ctx.log(c) });
           if (r.code !== 0) {
-            throw new AppError(502, 'compose_failed', `docker compose ${command.sub} exited with code ${r.code}${r.timedOut ? ' (timed out)' : ''}`);
+            throw new AppError(
+              502,
+              'compose_failed',
+              `docker compose ${command.sub} exited with code ${r.code}${r.timedOut ? ' (timed out)' : ''}`,
+            );
           }
-          this.d.audit.record({ ...base, outcome: 'success', durationMs: Date.now() - t0, params: { ...req, operation: ctx.id } });
+          this.d.audit.record({
+            ...base,
+            outcome: 'success',
+            durationMs: Date.now() - t0,
+            params: { ...req, operation: ctx.id },
+          });
         } catch (e) {
-          this.d.audit.record({ ...base, outcome: 'failure', durationMs: Date.now() - t0, params: { ...req, operation: ctx.id, error: (e as Error).message } });
+          this.d.audit.record({
+            ...base,
+            outcome: 'failure',
+            durationMs: Date.now() - t0,
+            params: { ...req, operation: ctx.id, error: (e as Error).message },
+          });
           throw e;
         } finally {
           this.d.containers.invalidate();
@@ -409,7 +480,9 @@ export class ComposeService implements Recreator {
     base: { actor: string; ip: string | null; action: string; target: string; params: unknown },
   ): Promise<{ operationId: string }> {
     this.d.guard.assertProject(summary.name, undefined, { perService: !!service });
-    const containers = (await this.rawContainers(summary.name)).filter((c) => !service || c.Labels?.[LABEL.service] === service);
+    const containers = (await this.rawContainers(summary.name)).filter(
+      (c) => !service || c.Labels?.[LABEL.service] === service,
+    );
     if (containers.length === 0) throw notFound('Service');
     const graph = graphFromLabels(await this.rawContainers(summary.name));
     const order = graph.order.length ? graph.order : graph.nodes;
@@ -417,7 +490,10 @@ export class ComposeService implements Recreator {
     containers.sort((a, b) => (action === 'stop' ? rank(b) - rank(a) : rank(a) - rank(b)));
     // refuse up-front if any container is not allowed (nothing is half-done)
     for (const c of containers) {
-      this.d.guard.assertContainer({ id: c.Id, name: (c.Names?.[0] ?? '').replace(/^\//, ''), project: summary.name }, action);
+      this.d.guard.assertContainer(
+        { id: c.Id, name: (c.Names?.[0] ?? '').replace(/^\//, ''), project: summary.name },
+        action,
+      );
     }
     const id = this.d.ops.start({
       kind: `compose.${action}`,
@@ -435,7 +511,12 @@ export class ComposeService implements Recreator {
           }
           this.d.audit.record({ ...base, outcome: 'success', durationMs: Date.now() - t0 });
         } catch (e) {
-          this.d.audit.record({ ...base, outcome: 'failure', durationMs: Date.now() - t0, params: { error: (e as Error).message } });
+          this.d.audit.record({
+            ...base,
+            outcome: 'failure',
+            durationMs: Date.now() - t0,
+            params: { error: (e as Error).message },
+          });
           throw e;
         } finally {
           this.invalidate();
@@ -451,7 +532,13 @@ export class ComposeService implements Recreator {
     return this.operate(
       c.project,
       'redeploy',
-      { service: c.service, forceRecreate: true, confirm: c.project, applyDrift: req.applyDrift, confirmNamespaceProvider: req.confirmNamespaceProvider },
+      {
+        service: c.service,
+        forceRecreate: true,
+        confirm: c.project,
+        applyDrift: req.applyDrift,
+        confirmNamespaceProvider: req.confirmNamespaceProvider,
+      },
       actor,
     );
   }
@@ -480,7 +567,13 @@ export function graphFromLabels(containers: Dockerode.ContainerInfo[]): Dependen
       if (!to) continue;
       nodes.add(to);
       if (!edges.some((e) => e.from === svc && e.to === to)) {
-        edges.push({ from: svc, to, kind: 'depends_on', condition: condition || 'service_started', restart: restart === 'true' });
+        edges.push({
+          from: svc,
+          to,
+          kind: 'depends_on',
+          condition: condition || 'service_started',
+          restart: restart === 'true',
+        });
       }
     }
   }

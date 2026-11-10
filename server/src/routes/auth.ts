@@ -74,7 +74,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
   app.post('/auth/logout', async (req, reply) => {
     if (!req.auth) throw unauthorized();
     auth.logout(req.auth);
-    ctx.audit.record({ actor: req.auth.user.username, ip: req.ip, action: 'auth.logout', outcome: 'success' });
+    ctx.audit.record({
+      actor: req.auth.user.username,
+      ip: req.ip,
+      action: 'auth.logout',
+      outcome: 'success',
+    });
     clearCookie(reply);
     return { ok: true };
   });
@@ -82,7 +87,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
   app.post('/auth/logout-all', async (req, reply) => {
     if (!req.auth) throw unauthorized();
     auth.logoutAll(req.auth.user.id);
-    ctx.audit.record({ actor: req.auth.user.username, ip: req.ip, action: 'auth.logout_all', outcome: 'success' });
+    ctx.audit.record({
+      actor: req.auth.user.username,
+      ip: req.ip,
+      action: 'auth.logout_all',
+      outcome: 'success',
+    });
     clearCookie(reply);
     return { ok: true };
   });
@@ -96,7 +106,12 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     const session = req.auth as AuthContext;
     const body = parseBody(passwordBody, req.body);
     await auth.changePassword(session, body.current, body.next);
-    ctx.audit.record({ actor: session.user.username, ip: req.ip, action: 'auth.password_change', outcome: 'success' });
+    ctx.audit.record({
+      actor: session.user.username,
+      ip: req.ip,
+      action: 'auth.password_change',
+      outcome: 'success',
+    });
     return { ok: true, note: 'All other sessions were signed out' };
   });
 

@@ -2,10 +2,17 @@
   "name": "quaymaster",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Docker management and maintenance dashboard",
   "license": "MIT",
-  "engines": { "node": ">=22" },
-  "workspaces": ["shared", "server", "web"],
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "shared",
+    "server",
+    "web"
+  ],
   "scripts": {
     "build": "npm run build -w shared && npm run build -w server && npm run build -w web",
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w server && npm run typecheck -w web",

@@ -54,10 +54,17 @@ export async function audited<T>(
     audit.record({ ...base, outcome: 'success', durationMs: Date.now() - t0 });
     return result;
   } catch (err) {
-    const denied = typeof err === 'object' && err !== null && 'status' in err && [403, 409].includes((err as { status: number }).status);
+    const denied =
+      typeof err === 'object' &&
+      err !== null &&
+      'status' in err &&
+      [403, 409].includes((err as { status: number }).status);
     audit.record({
       ...base,
-      params: { ...(typeof base.params === 'object' && base.params ? base.params : {}), error: (err as Error).message },
+      params: {
+        ...(typeof base.params === 'object' && base.params ? base.params : {}),
+        error: (err as Error).message,
+      },
       outcome: denied ? 'denied' : 'failure',
       durationMs: Date.now() - t0,
     });
