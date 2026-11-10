@@ -138,6 +138,176 @@ CREATE TABLE kv (
 );
 `,
   },
+  {
+    version: 2,
+    name: 'updates_maintenance_notifications',
+    sql: `
+-- Private-registry credentials: the secret itself lives encrypted in secret_store ('registry:<host>').
+CREATE TABLE registry_credentials (
+  host TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- Cached registry lookups (update detection, spec 7.1).
+CREATE TABLE image_checks (
+  ref TEXT PRIMARY KEY,
+  state TEXT NOT NULL,
+  reason TEXT,
+  local_digest TEXT,
+  remote_digest TEXT,
+  source TEXT,
+  checked_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+-- Images pulled by digest and held under quaymaster-staged/<hash>:<digest12> (RT-07).
+CREATE TABLE staged_images (
+  tag TEXT PRIMARY KEY,
+  ref TEXT NOT NULL,
+  digest TEXT NOT NULL,
+  image_id TEXT,
+  created_at INTEGER NOT NULL
+);
+
+-- Rollback points (RT-06): the image ID comes from the running container; the tag is hash-named.
+CREATE TABLE rollback_points (
+  tag TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  project TEXT,
+  service TEXT,
+  container_name TEXT,
+  ref TEXT NOT NULL,
+  image_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  released INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX rollback_run ON rollback_points(run_id);
+
+-- A (target, remote digest) pair that failed is quarantined for unattended runs (RT-22).
+CREATE TABLE quarantine (
+  target TEXT NOT NULL,
+  digest TEXT NOT NULL,
+  run_id TEXT,
+  reason TEXT,
+  created_at INTEGER NOT NULL,
+  cleared_at INTEGER,
+  PRIMARY KEY (target, digest)
+);
+
+CREATE TABLE policies (
+  scope_kind TEXT NOT NULL CHECK (scope_kind IN ('global','project','service','container')),
+  scope_key TEXT NOT NULL,
+  body TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (scope_kind, scope_key)
+);
+
+CREATE TABLE windows (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  days TEXT NOT NULL,
+  start_time TEXT NOT NULL,
+  end_time TEXT NOT NULL,
+  tz TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE schedules (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  cron TEXT NOT NULL,
+  tz TEXT NOT NULL,
+  job_type TEXT NOT NULL CHECK (job_type IN ('image_check','image_pull','update','cleanup_report')),
+  selector TEXT NOT NULL DEFAULT '{}',
+  mode TEXT NOT NULL CHECK (mode IN ('manual','auto')),
+  window_id TEXT REFERENCES windows(id),
+  enabled INTEGER NOT NULL DEFAULT 1,
+  cursor_utc INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+-- Maintenance runs. id == operations.id so intents and live output share one identity.
+CREATE TABLE runs (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('dry_run','update','image_check','image_pull','cleanup_report')),
+  trigger TEXT NOT NULL CHECK (trigger IN ('manual','schedule')),
+  schedule_id TEXT,
+  occurrence_utc INTEGER,
+  window_id TEXT,
+  window_end_utc INTEGER,
+  target TEXT NOT NULL,
+  status TEXT NOT NULL,
+  reason TEXT,
+  plan TEXT,
+  plan_hash TEXT,
+  requested_by TEXT NOT NULL,
+  approval_expires_at INTEGER,
+  approved_by TEXT,
+  approved_at INTEGER,
+  approved_plan_hash TEXT,
+  options TEXT NOT NULL DEFAULT '{}',
+  result TEXT,
+  guidance TEXT,
+  created_at INTEGER NOT NULL,
+  started_at INTEGER,
+  finished_at INTEGER
+);
+CREATE INDEX runs_created ON runs(created_at);
+CREATE INDEX runs_status ON runs(status);
+
+CREATE TABLE run_steps (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  seq INTEGER NOT NULL,
+  service TEXT,
+  step TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('running','succeeded','failed','skipped')),
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER,
+  detail TEXT
+);
+CREATE INDEX run_steps_run ON run_steps(run_id, seq);
+
+CREATE TABLE notification_channels (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  min_severity TEXT NOT NULL DEFAULT 'info',
+  events TEXT NOT NULL DEFAULT '["*"]',
+  secret_name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE notification_deliveries (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts INTEGER NOT NULL,
+  channel_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  dedupe_key TEXT,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending','sent','failed','suppressed','dead')),
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at INTEGER,
+  last_error TEXT,
+  http_status INTEGER,
+  event_json TEXT NOT NULL
+);
+CREATE INDEX deliveries_ts ON notification_deliveries(ts);
+CREATE INDEX deliveries_pending ON notification_deliveries(status, next_attempt_at);
+
+CREATE TABLE notification_dedupe (
+  key TEXT PRIMARY KEY,
+  last_sent_at INTEGER NOT NULL,
+  suppressed INTEGER NOT NULL DEFAULT 0
+);
+`,
+  },
 ];
 
 export function runMigrations(db: Db, opts: { backupDir?: string; migrations?: Migration[] } = {}): number[] {
