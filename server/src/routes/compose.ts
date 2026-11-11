@@ -6,7 +6,7 @@ import type { AppContext } from '../context.js';
 import { PROJECT_NAME_RE } from '../compose/argv.js';
 import { badRequest } from '../util/errors.js';
 
-const ACTIONS: readonly ComposeAction[] = ['up', 'stop', 'start', 'restart', 'down', 'pull', 'redeploy'];
+const ACTIONS: readonly ComposeAction[] = ['up', 'stop', 'start', 'restart', 'down', 'redeploy'];
 const actionBody = z
   .object({
     service: z.string().max(100).optional(),

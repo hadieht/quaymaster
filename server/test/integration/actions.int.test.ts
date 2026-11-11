@@ -238,6 +238,8 @@ describe('compose operations (full level, fixtures only)', () => {
       (await post(t, '/compose/projects/qmtest-single/actions/restart', { service: '--rmi' })).status,
     ).toBe(400);
     expect((await post(t, '/compose/projects/Not_Valid/actions/restart')).status).toBe(400);
+    // F-04 (RT-07): `compose pull` moves the shared tag; it is no longer an action at all
+    expect((await post(t, '/compose/projects/qmtest-single/actions/pull')).status).toBe(400);
     expect((await post(t, '/compose/projects/qmtest-single/actions/restart', { volumes: true })).status).toBe(
       400,
     ); // strict body
@@ -250,7 +252,7 @@ describe('compose operations (full level, fixtures only)', () => {
     }[];
     const limited = projects.find((p) => p.level === 'limited');
     if (!limited) return;
-    const r = await post(t, `/compose/projects/${limited.name}/actions/pull`);
+    const r = await post(t, `/compose/projects/${limited.name}/actions/up`);
     expect(r.status).toBe(409);
     expect(r.body.error.code).toBe('limited_capability');
     expect(r.body.error.message).toMatch(/QM_STACK_PATHS/);

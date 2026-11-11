@@ -311,10 +311,11 @@ describe('compose argv templates (RT-01, RT-28)', () => {
       buildComposeArgv(t, { sub: 'up', services: [], noDeps: false, forceRecreate: false }),
     ).not.toContain('--force-recreate');
   });
-  it('down has no -v / --rmi / --remove-orphans; stop/start/restart/pull take services after --', () => {
+  it('down has no -v / --rmi / --remove-orphans; stop/start/restart take services after --; pull is refused (F-04)', () => {
     expect(buildComposeArgv(t, { sub: 'down' })).toEqual([...anchor, 'down']);
     expect(buildComposeArgv(t, { sub: 'stop', services: ['a'] }).slice(-3)).toEqual(['stop', '--', 'a']);
-    expect(buildComposeArgv(t, { sub: 'pull', services: [] }).slice(-1)).toEqual(['pull']);
+    expect(() => assertSafeArgv([...anchor, 'pull'])).toThrow(/Forbidden Compose subcommand pull/);
+    expect(() => assertSafeArgv([...anchor, 'pull', '--', 'web'])).toThrow();
   });
   it('rejects injection through names and paths; deny-list holds for every built command', () => {
     expect(() => buildComposeArgv(t, { sub: 'stop', services: ['--rmi'] })).toThrow();

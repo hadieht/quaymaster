@@ -159,7 +159,7 @@ export interface DependencyGraph {
   cycle: string[] | null;
 }
 
-export type ComposeAction = 'up' | 'stop' | 'start' | 'restart' | 'down' | 'pull' | 'redeploy';
+export type ComposeAction = 'up' | 'stop' | 'start' | 'restart' | 'down' | 'redeploy';
 export interface ComposeActionRequest extends ActionRequest {
   service?: string;
   forceRecreate?: boolean;

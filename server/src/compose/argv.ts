@@ -22,8 +22,7 @@ export type ComposeCommand =
   | { sub: 'stop'; services: string[] }
   | { sub: 'start'; services: string[] }
   | { sub: 'restart'; services: string[] }
-  | { sub: 'down' }
-  | { sub: 'pull'; services: string[] };
+  | { sub: 'down' };
 
 /** Flags that must never appear in an argv we build (RT-28); the runner re-checks this last. */
 const FORBIDDEN_FLAGS = [
@@ -38,6 +37,12 @@ const FORBIDDEN_FLAGS = [
   '--yes',
   '-y',
 ];
+
+/**
+ * Compose subcommands that must never appear in an argv we build. `pull` would move the shared,
+ * user-visible tag outside the staged-by-digest workflow (RT-07); the others are simply never needed.
+ */
+const FORBIDDEN_SUBCOMMANDS = ['pull', 'push', 'build', 'create', 'run', 'exec', 'cp', 'rm', 'kill'];
 
 function validateName(kind: string, value: string, re: RegExp): void {
   if (!re.test(value) || value.startsWith('-')) throw new AppError(400, 'validation', `Invalid ${kind} name`);
@@ -107,9 +112,6 @@ export function buildComposeArgv(t: ComposeTarget, cmd: ComposeCommand): string[
     case 'down':
       argv = [...base, 'down']; // never -v / --rmi / --remove-orphans
       break;
-    case 'pull':
-      argv = [...base, 'pull', ...svc(cmd.services)];
-      break;
   }
   assertSafeArgv(argv, { allowForceRecreate: cmd.sub === 'up' && cmd.forceRecreate });
   return argv;
@@ -120,6 +122,9 @@ export const COMPOSE_LS_ARGV: readonly string[] = ['compose', 'ls', '--all', '--
 export const COMPOSE_VERSION_ARGV: readonly string[] = ['compose', 'version', '--short'];
 
 export function assertSafeArgv(argv: readonly string[], opts: { allowForceRecreate?: boolean } = {}): void {
+  const sub = subcommandOf(argv);
+  if (FORBIDDEN_SUBCOMMANDS.includes(sub))
+    throw new AppError(500, 'internal', `Forbidden Compose subcommand ${sub}`);
   const sep = argv.indexOf('--');
   const flags = sep >= 0 ? argv.slice(0, sep) : argv;
   for (const a of flags) {

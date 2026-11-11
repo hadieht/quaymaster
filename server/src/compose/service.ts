@@ -486,8 +486,6 @@ export class ComposeService implements Recreator {
         case 'down':
           if (service) throw badRequest('`down` applies to a whole project; use stop for a single service');
           return { sub: 'down' };
-        case 'pull':
-          return { sub: 'pull', services };
       }
     })();
     const argv = buildComposeArgv(target, command);

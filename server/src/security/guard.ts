@@ -188,7 +188,7 @@ export class Guard {
 
   /** Compose subcommand authorisation (RT-03): read-only mode allows only these. */
   static readonly COMPOSE_READ_ONLY = new Set(['config', 'ls', 'ps', 'images', 'version']);
-  static readonly COMPOSE_MUTATING = new Set(['up', 'stop', 'start', 'restart', 'down', 'pull']);
+  static readonly COMPOSE_MUTATING = new Set(['up', 'stop', 'start', 'restart', 'down']);
 
   assertComposeSubcommand(sub: string): void {
     if (Guard.COMPOSE_READ_ONLY.has(sub)) return;
