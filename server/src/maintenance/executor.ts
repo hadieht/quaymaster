@@ -16,6 +16,7 @@ import type { Config } from '../config/env.js';
 import type { RunRow, RunsRepo, WindowsRepo } from '../db/maintenance.js';
 import type { QuarantineRepo, RollbackRepo, StagedRepo } from '../db/updates.js';
 import { LABEL } from '../docker/model.js';
+import { SYSTEM_ACTOR, type ContainerService } from '../docker/containers.js';
 import type { ImageOps } from '../docker/imageops.js';
 import type { OperationContext } from '../operations/manager.js';
 import { redactDeep } from '../redaction/redact.js';
@@ -42,6 +43,8 @@ class RunStop extends Error {
 export interface ExecutorDeps {
   compose: ComposeService;
   docker: Dockerode;
+  /** The service layer for container lifecycle calls (guard, scope, audit) — dependents are restarted through it. */
+  containers: Pick<ContainerService, 'act'>;
   images: ImageOps;
   updates: UpdateService;
   planner: Planner;
@@ -392,10 +395,10 @@ export class RunExecutor {
     const run = this.d.runs.get(runId);
     if (!run || !run.plan) throw new AppError(404, 'not_found', 'Run has no plan');
     const plan = run.plan;
-    const points = this.d.rollback.forRun(runId);
+    const points = this.d.rollback
+      .forRun(runId)
+      .filter((pt) => !only || only.length === 0 || only.includes(pt.service ?? ''));
     const svcOf = (x: { service: string | null }): string => x.service ?? '';
-    if (points.length === 0)
-      throw new AppError(409, 'conflict', 'This run has no recovery points to restore');
     if (points.length === 0)
       throw new AppError(409, 'conflict', 'This run has no recovery points to restore');
     const { target } = await this.d.compose.targetOf(plan.target, true);
@@ -411,9 +414,26 @@ export class RunExecutor {
       if (!s || !ref) continue;
       const repoTag = `${engineName(ref)}:${ref.tag ?? 'latest'}`;
       const stepId = this.d.runs.startStep(runId, ++seq, p.service, 'restore');
+      // write-ahead intent like every other recreate (RT-14): a crash here is visible to recover()
+      const intent = this.d.runs.addIntent({
+        operationId: runId,
+        service: p.service,
+        action: 'rollback',
+        fromImage: null,
+        toImage: p.image_id,
+        containerIdsBefore: (await this.d.compose.projectContainers(plan.target))
+          .filter((c) => c.Labels?.[LABEL.service] === p.service)
+          .map((c) => c.Id),
+      });
       try {
         const img = await this.d.images.inspect(p.image_id);
         if (!img) throw new Error('the recovery image no longer exists locally');
+        // RT-01: restoring must not apply an unreviewed configuration change
+        const drift = await this.d.compose.checkDrift(target, [p.service]);
+        if (drift.length > 0)
+          throw new Error(
+            'the Compose configuration changed since the service was last deployed; restoring would apply that change. Review it and restore by hand',
+          );
         await this.d.images.tag(p.image_id, repoTag);
         ctx.log(`restoring ${p.service} to ${p.image_id.slice(0, 19)}\n`);
         const dep = await this.d.compose.deployServices(
@@ -438,6 +458,7 @@ export class RunExecutor {
         failures.push(`${p.service}: ${(e as Error).message}`);
         this.d.runs.finishStep(stepId, 'failed', { error: (e as Error).message });
       }
+      this.d.runs.completeIntent(intent);
     }
     this.d.compose.invalidate();
     this.d.audit.record({
@@ -712,6 +733,15 @@ export class RunExecutor {
     });
     const r = await step<{ ok: boolean; why: string }>('rollback', s.service, async () => {
       try {
+        // RT-01: a rollback is a recreate too; it must not apply a configuration change made meanwhile
+        const drift = await this.d.compose.checkDrift(target, [s.service]);
+        if (drift.length > 0)
+          return {
+            value: {
+              ok: false,
+              why: 'the Compose configuration changed during the run; the rollback would apply that change, so it was not done',
+            },
+          };
         await this.d.images.tag(oldId, repoTag);
         log(`rolling ${s.service} back to ${oldId.slice(0, 19)}`);
         const dep = await this.d.compose.deployServices(
@@ -840,15 +870,24 @@ export class RunExecutor {
         );
         return r.ok;
       };
+      const restartErrors: string[] = [];
       const ok = await step('health', dep, async () => {
         let good = await check();
         if (!good && restart) {
-          for (const c of live) await this.restartContainer(c.Id);
+          for (const c of live) {
+            const err = await this.restartContainer(c.Id);
+            if (err) restartErrors.push(`${c.Id.slice(0, 12)}: ${err}`);
+          }
           good = await check();
         }
         return {
           value: good,
-          detail: { dependentOf: s.service, restartedBecauseDeclared: !good ? false : restart },
+          failed: !good,
+          detail: {
+            dependentOf: s.service,
+            restartedBecauseDeclared: !good ? false : restart,
+            ...(restartErrors.length ? { restartErrors } : {}),
+          },
         };
       });
       if (!ok) return dep;
@@ -856,12 +895,14 @@ export class RunExecutor {
     return null;
   }
 
-  private async restartContainer(id: string): Promise<void> {
-    // Engine API restart through the service layer (guard + permit)
-    const { withPermit } = await import('../security/guard.js');
-    await withPermit({ containerId: id, action: 'restart' }, () =>
-      this.d.docker.getContainer(id).restart({ t: 5 }),
-    ).catch(() => undefined);
+  /** Restart through the service layer (scope / self-protection / audit); returns an error message or null. */
+  private async restartContainer(id: string): Promise<string | null> {
+    try {
+      await this.d.containers.act(id, 'restart', { timeoutSeconds: 5 }, SYSTEM_ACTOR);
+      return null;
+    } catch (e) {
+      return (e as Error).message;
+    }
   }
 
   /** RT-14: if another tool changed the run's containers meanwhile, abort WITHOUT rolling back. */

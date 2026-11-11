@@ -267,6 +267,7 @@ async function build(
   const executor = new RunExecutor({
     compose,
     docker,
+    containers,
     images: imageOps,
     updates,
     planner,

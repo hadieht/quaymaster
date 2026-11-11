@@ -74,6 +74,8 @@ class World {
   pullFails = false;
   /** Wanted `compose config --hash` per service (default 'h', as in the plans). */
   hashes = new Map<string, string>();
+  /** Services for which `checkDrift` (running label vs wanted hash) reports drift. */
+  rollbackDrift = new Set<string>();
   /** Called after a deployServices call (to simulate things happening mid-run). */
   afterDeploy?: (service: string) => void;
   /** Image IDs whose containers never become healthy. */
@@ -106,6 +108,10 @@ class World {
         }
         return { code: 0, timedOut: false, stderrTail: '', argv: ['compose', 'up'] };
       },
+      checkDrift: async (_t: unknown, services: string[]) =>
+        services
+          .filter((x) => this.rollbackDrift.has(x))
+          .map((x) => ({ service: x, running: [], wanted: 'x' })),
       configHashes: async (_t: unknown, services: string[]) =>
         new Map(services.map((x) => [x, this.hashes.get(x) ?? 'h'])),
       resolvedConfig: async () => ({ config: {} }),
@@ -171,6 +177,7 @@ describe('RunExecutor state machine (fake Docker)', () => {
     const ex = new RunExecutor({
       compose: world.compose(),
       docker: world.docker(),
+      containers: { act: async () => ({ ok: true as const }) },
       images: world.images(),
       updates: { statuses: async () => [] } as any,
       planner: { planProject: async () => opts.fresh ?? p } as any,
@@ -326,6 +333,7 @@ describe('RunExecutor audit 01b regressions (fake Docker)', () => {
     const ex = new RunExecutor({
       compose: world.compose(),
       docker: world.docker(),
+      containers: { act: async () => ({ ok: true as const }) },
       images: world.images(),
       updates: { statuses: async () => [] } as any,
       planner: { planProject: async () => p } as any,
@@ -437,6 +445,52 @@ describe('RunExecutor audit 01b regressions (fake Docker)', () => {
     const open = t.runs.openIntents('r1');
     expect(open.map((i) => `${i.service}:${i.action}`)).toEqual(['db:deploy']);
     expect(open[0]?.toImage).toBe(IMG_NEW);
+  });
+
+  it('F-01: the automatic rollback is not done when the Compose configuration changed meanwhile', async () => {
+    const world = new World(['db']);
+    world.unhealthy.add(IMG_BAD);
+    world.rollbackDrift.add('db');
+    const t = harness([svc('db')], world);
+    expect(await t.exec()).toBe('failed');
+    expect(world.deploys).toEqual([`db->${IMG_BAD}`]); // no second (rollback) deploy
+    expect(t.runs.get('r1')?.reason).toMatch(/rollback also failed: .*configuration changed/);
+  });
+
+  it('F-13: restore honours the service filter, opens and completes an intent, and refuses on drift', async () => {
+    const world = new World(['db', 'app']);
+    const t = harness([svc('db'), svc('app')], world);
+    expect(await t.exec()).toBe('completed');
+    const ctx = { id: 'r1', log: () => undefined, shuttingDown: false } as any;
+    const actor = { name: 'admin', ip: null };
+    world.deploys.length = 0;
+    await t.ex.restore('r1', ['app'], actor, ctx);
+    expect(world.deploys).toEqual([`app->${IMG_OLD}`]); // db untouched
+    expect(t.runs.openIntents('r1')).toEqual([]);
+    world.deploys.length = 0;
+    world.rollbackDrift.add('db');
+    await expect(t.ex.restore('r1', ['db'], actor, ctx)).rejects.toThrow(/configuration changed/);
+    expect(world.deploys).toEqual([]);
+    expect(t.runs.openIntents('r1')).toEqual([]);
+  });
+
+  it('F-10: dependents are restarted through the service layer; failures are returned, not swallowed', async () => {
+    const world = new World(['db']);
+    const calls: unknown[][] = [];
+    let fail = false;
+    const t = harness([svc('db')], world);
+    (t.ex as any).d.containers = {
+      act: async (...a: unknown[]) => {
+        calls.push(a);
+        if (fail) throw new Error('out of scope');
+        return { ok: true };
+      },
+    };
+    expect(await (t.ex as any).restartContainer('abc')).toBeNull();
+    expect(calls[0]?.slice(0, 3)).toEqual(['abc', 'restart', { timeoutSeconds: 5 }]);
+    expect((calls[0]?.[3] as { name: string }).name).toBe('system');
+    fail = true;
+    expect(await (t.ex as any).restartContainer('abc')).toBe('out of scope');
   });
 
   it('F-02: after a normal outcome no intent is left open', async () => {

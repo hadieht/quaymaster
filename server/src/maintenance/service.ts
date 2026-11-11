@@ -680,6 +680,39 @@ export class MaintenanceService {
         outcome: 'failure',
       });
     }
+    // intents left open by a restore (the run itself was already final): report them the same way (F-13)
+    for (const it of this.d.runs.openIntents()) {
+      const run = this.d.runs.get(it.operationId);
+      if (!run) {
+        this.d.runs.completeIntent(it.id);
+        continue;
+      }
+      let all: Dockerode.ContainerInfo[] = [];
+      try {
+        all = await this.d.containers.listRaw(true);
+      } catch {
+        /* Docker unreachable */
+      }
+      const r =
+        it.action === 'standalone_clone'
+          ? this.describeStandalone(it, all)
+          : await this.describeCompose(run, it, all);
+      this.d.notify({
+        type: r.down ? 'service.left_down' : 'run.interrupted',
+        severity: r.down ? 'critical' : 'warning',
+        title: `${r.down ? 'Service left down' : 'Restore interrupted'} after a crash: ${r.title}`,
+        message: `Quaymaster stopped during an operation on ${it.service} (run ${run.id}). ${r.guidance[0] ?? ''}`,
+        dedupeKey: `orphan-intent:${it.id}`,
+      });
+      this.d.audit.record({
+        actor: 'system',
+        action: 'maintenance.restore.interrupted',
+        target: run.target,
+        params: { run: run.id, service: it.service, guidance: r.guidance },
+        outcome: 'failure',
+      });
+      this.d.runs.completeIntent(it.id);
+    }
     return interrupted.length;
   }
 
