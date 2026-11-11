@@ -390,6 +390,34 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     expect(versionOf(snap('app').imageId)).toBe('2-good');
   });
 
+  it('one-click restore puts the recorded previous images back, after typed confirmation', async () => {
+    await fastPolicy();
+    publish('app', 2, 'good');
+    const before = snapAll();
+    const run = (await runToEnd()) as never as { status: string; id: string };
+    expect(run.status).toBe('completed');
+    expect(versionOf(snap('app').imageId)).toBe('2-good');
+    const noConfirm = await t.call('POST', `/api/v1/maintenance/runs/${run.id}/restore`, {}, t.admin);
+    expect(noConfirm.status).toBe(409);
+    expect(versionOf(snap('app').imageId)).toBe('2-good'); // nothing happened without confirmation
+    const r = await t.call('POST', `/api/v1/maintenance/runs/${run.id}/restore`, { confirm: PROJECT }, t.admin);
+    expect(r.status, r.raw).toBe(202);
+    const op = await waitFor(
+      async () => {
+        const o = await t.call('GET', `/api/v1/operations/${r.body.operationId}`, undefined, t.admin);
+        return o.body.status !== 'running' ? o.body : null;
+      },
+      'restore',
+      120_000,
+      500,
+    );
+    expect(op.status, op.error).toBe('succeeded');
+    const app = snap('app');
+    expect(app.imageId).toBe(before['app']?.imageId);
+    expect(app.status).toBe('running');
+    expect(snap('db')).toEqual(before['db']); // untouched services stay untouched
+  });
+
   it('a crash mid-run leaves the run `interrupted` after restart (never resumed), with guidance', async () => {
     await fastPolicy();
     publish('app', 2, 'good');

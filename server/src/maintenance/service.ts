@@ -36,6 +36,7 @@ import { AppError, badRequest, conflict, notFound } from '../util/errors.js';
 import type { Logger } from '../util/logger.js';
 import type { Clock } from './clock.js';
 import type { RunExecutor } from './executor.js';
+import type { StandaloneUpdater } from './standalone.js';
 import type { PolicyResolver } from './policy.js';
 import type { Planner } from './planner.js';
 import {
@@ -121,6 +122,7 @@ export class MaintenanceService {
       resolver: PolicyResolver;
       planner: Planner;
       executor: RunExecutor;
+      standalone: StandaloneUpdater;
       ops: OperationManager;
       updates: UpdateService;
       images: ImageOps;
@@ -505,6 +507,76 @@ export class MaintenanceService {
         }
       },
     });
+  }
+
+  /** Standalone container update by config clone (RT-12): manual only, typed confirmation, never unattended. */
+  async startStandalone(req: { container: string; confirm?: string }, actor: Actor): Promise<RunDetail> {
+    const prepared = await this.d.standalone.prepare(req.container, req.confirm);
+    if (this.d.ops.busy() || this.d.runs.running())
+      throw conflict('conflict', 'Another maintenance run is in progress (one run at a time)');
+    const id = randomUUID();
+    this.d.runs.create({
+      id,
+      kind: 'update',
+      trigger: 'manual',
+      target: prepared.name,
+      status: 'approved',
+      requestedBy: actor.name,
+      options: {},
+    });
+    this.audit(actor, 'maintenance.standalone.start', prepared.name, {
+      run: id,
+      from: prepared.fromImageId.slice(0, 19),
+      to: prepared.toDigest.slice(0, 19),
+    });
+    this.d.ops.start({
+      id,
+      kind: 'maintenance.update',
+      target: prepared.name,
+      actor: actor.name,
+      params: { run: id, standalone: true },
+      lockKey: 'maintenance',
+      run: async (ctx) => {
+        const status = await this.d.standalone.execute(id, prepared, ctx);
+        if (status !== 'completed') throw new Error(`run ${status}: ${this.d.runs.get(id)?.reason ?? ''}`);
+      },
+    });
+    return this.getRun(id);
+  }
+
+  /** One-click restore of the recovery points of a finished run (RT-14); admin-confirmed, never automatic. */
+  async restore(
+    id: string,
+    req: { confirm?: string; services?: string[] },
+    actor: Actor,
+  ): Promise<{ operationId: string }> {
+    const run = this.d.runs.get(id);
+    if (!run) throw notFound('Run');
+    if (['running', 'approved', 'awaiting_approval', 'planned'].includes(run.status))
+      throw conflict('conflict', `Run is ${run.status}; restore applies to finished runs`);
+    if (run.kind !== 'update') throw badRequest('Only update runs have recovery points');
+    if (req.confirm !== run.target)
+      throw new AppError(409, 'confirmation_required', `Confirm by sending {"confirm":"${run.target}"}`, {
+        expected: run.target,
+      });
+    const ro = this.d.guard.readOnlyReason;
+    if (ro) throw new AppError(409, 'read_only', `Read-only mode: ${ro}`);
+    if (this.d.ops.busy() || this.d.runs.running())
+      throw conflict('conflict', 'Another maintenance run is in progress (one run at a time)');
+    const opId = randomUUID();
+    this.audit(actor, 'maintenance.run.restore', run.target, { run: id, services: req.services ?? 'all' });
+    this.d.ops.start({
+      id: opId,
+      kind: 'maintenance.restore',
+      target: run.target,
+      actor: actor.name,
+      params: { run: id, services: req.services ?? null },
+      lockKey: 'maintenance',
+      run: async (ctx) => {
+        await this.d.executor.restore(id, req.services, actor, ctx);
+      },
+    });
+    return { operationId: opId };
   }
 
   /** RT-08: a stale approval is never executed; a new request is created for the new plan. */

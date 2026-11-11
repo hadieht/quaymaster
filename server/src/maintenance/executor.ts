@@ -368,6 +368,81 @@ export class RunExecutor {
     return this.record(run, plan, status, reason, outcomes, guidance, ctx);
   }
 
+  /** One-click restore (RT-14): puts the recorded previous image back for the run's services and re-checks them. */
+  async restore(
+    runId: string,
+    only: string[] | undefined,
+    actor: { name: string; ip: string | null },
+    ctx: OperationContext,
+  ): Promise<void> {
+    const run = this.d.runs.get(runId);
+    if (!run || !run.plan) throw new AppError(404, 'not_found', 'Run has no plan');
+    const plan = run.plan;
+    const points = this.d.rollback
+      .forRun(runId)
+    const svcOf = (x: { service: string | null }): string => x.service ?? '';
+    if (points.length === 0) throw new AppError(409, 'conflict', 'This run has no recovery points to restore');
+    if (points.length === 0) throw new AppError(409, 'conflict', 'This run has no recovery points to restore');
+    const { target } = await this.d.compose.targetOf(plan.target, true);
+    let seq = 20_000;
+    const failures: string[] = [];
+    // reverse deployment order: dependents first, dependencies last
+    const order = [...plan.order].reverse();
+    points.sort((a, b) => order.indexOf(svcOf(a)) - order.indexOf(svcOf(b)));
+    for (const pt of points) {
+      const p = { ...pt, service: svcOf(pt) };
+      const s = plan.services.find((x) => x.service === p.service);
+      const ref = parseImageRef(p.ref);
+      if (!s || !ref) continue;
+      const repoTag = `${engineName(ref)}:${ref.tag ?? 'latest'}`;
+      const stepId = this.d.runs.startStep(runId, ++seq, p.service, 'restore');
+      try {
+        const img = await this.d.images.inspect(p.image_id);
+        if (!img) throw new Error('the recovery image no longer exists locally');
+        await this.d.images.tag(p.image_id, repoTag);
+        ctx.log(`restoring ${p.service} to ${p.image_id.slice(0, 19)}\n`);
+        const dep = await this.d.compose.deployServices(
+          target,
+          { services: [p.service], forceRecreate: false, noStart: !s.wasRunning },
+          (c) => ctx.log(c),
+        );
+        if (dep.code !== 0) throw new Error(`compose up exited ${dep.code}: ${dep.stderrTail}`);
+        if (s.wasRunning) {
+          const live = (await this.d.compose.projectContainers(plan.target)).filter(
+            (c) => c.Labels?.[LABEL.service] === p.service,
+          );
+          const h = await this.health(
+            live.map((c) => c.Id),
+            s,
+            p.image_id,
+          );
+          if (!h.ok) throw new Error(h.reason);
+        }
+        this.d.runs.finishStep(stepId, 'succeeded');
+      } catch (e) {
+        failures.push(`${p.service}: ${(e as Error).message}`);
+        this.d.runs.finishStep(stepId, 'failed', { error: (e as Error).message });
+      }
+    }
+    this.d.compose.invalidate();
+    this.d.audit.record({
+      actor: actor.name,
+      ip: actor.ip,
+      action: 'maintenance.restore',
+      target: plan.target,
+      params: { run: runId, services: points.map((p) => p.service), failures },
+      outcome: failures.length ? 'failure' : 'success',
+    });
+    this.d.notify({
+      type: failures.length ? 'run.failed' : 'run.rolled_back',
+      severity: failures.length ? 'critical' : 'warning',
+      title: `Restore ${failures.length ? 'failed' : 'completed'}: ${plan.target}`,
+      message: failures.length ? failures.join('; ') : `Restored ${points.map((p) => p.service).join(', ')}`,
+      dedupeKey: `restore:${runId}:${Date.now()}`,
+    });
+    if (failures.length) throw new Error(`restore failed: ${failures.join('; ')}`);
+  }
+
   // ---- one service ------------------------------------------------------------------------
 
   private async deployOne(

@@ -232,6 +232,29 @@ export function registerMaintenanceRoutes(app: FastifyInstance, ctx: AppContext)
     void reply.status(202);
     return run;
   });
+  app.post('/maintenance/standalone', admin, async (req, reply) => {
+    const b = parseBody(
+      z.object({ container: z.string().min(1).max(200), confirm: z.string().max(200).optional() }).strict(),
+      req.body,
+    );
+    const run = await ctx.maintenance.startStandalone(b, actorOf(req));
+    void reply.status(202);
+    return run;
+  });
+  app.post<{ Params: { id: string } }>('/maintenance/runs/:id/restore', admin, async (req, reply) => {
+    const b = parseBody(
+      z
+        .object({
+          confirm: z.string().max(200).optional(),
+          services: z.array(z.string().max(100)).max(100).optional(),
+        })
+        .strict(),
+      req.body,
+    );
+    const r = await ctx.maintenance.restore(req.params.id, b, actorOf(req));
+    void reply.status(202);
+    return r;
+  });
   app.post<{ Params: { id: string } }>('/maintenance/runs/:id/reject', admin, async (req) =>
     ctx.maintenance.reject(req.params.id, actorOf(req)),
   );

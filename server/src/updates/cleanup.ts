@@ -239,7 +239,7 @@ export class CleanupService {
           continue;
         }
         const age = now - c.Created * 1000;
-        if (name.startsWith('qm-old-') && age < this.d.retentionMs) {
+        if ((name.startsWith('qm-old-') || /-qm-old-\d+$/.test(name)) && age < this.d.retentionMs) {
           add('standalone rollback point within retention');
           continue;
         }

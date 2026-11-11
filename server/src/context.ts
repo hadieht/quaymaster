@@ -38,6 +38,7 @@ import {
 import { ImageOps } from './docker/imageops.js';
 import { AdjustableClock } from './maintenance/clock.js';
 import { RunExecutor } from './maintenance/executor.js';
+import { StandaloneUpdater } from './maintenance/standalone.js';
 import { MaintenanceService } from './maintenance/service.js';
 import { Planner } from './maintenance/planner.js';
 import { PolicyResolver } from './maintenance/policy.js';
@@ -280,6 +281,22 @@ async function build(
     clock,
     log,
   });
+  const standalone = new StandaloneUpdater({
+    docker,
+    containers,
+    images: imageOps,
+    updates,
+    runs: runsRepo,
+    rollback: rollbackRepo,
+    staged: stagedRepo,
+    resolver,
+    guard,
+    audit,
+    notify,
+    config,
+    clock,
+    log,
+  });
   const cleanup = new CleanupService({
     docker,
     containers,
@@ -318,6 +335,7 @@ async function build(
     resolver,
     planner,
     executor,
+    standalone,
     ops,
     updates,
     images: imageOps,

@@ -101,6 +101,7 @@ interface InUse {
  */
 export class UpdateService {
   private inflight: Promise<ImageUpdateStatus[]> | null = null;
+  private inflightFresh = false;
 
   constructor(
     private readonly d: {
@@ -142,15 +143,21 @@ export class UpdateService {
 
   /** Status of every image in use. `fresh` bypasses the cache; concurrent calls share one run. */
   async statuses(opts: { fresh?: boolean } = {}): Promise<ImageUpdateStatus[]> {
+    const fresh = opts.fresh === true;
+    // concurrent calls share one run; a fresh request never piggybacks on a cached one that started earlier
+    // (it could return answers from before a registry change the caller just made)
+    while (this.inflight && fresh && !this.inflightFresh) await this.inflight.catch(() => undefined);
     if (this.inflight) return this.inflight;
-    this.inflight = (async () => {
+    this.inflightFresh = fresh;
+    const run = (async () => {
       const out: ImageUpdateStatus[] = [];
-      for (const u of await this.inUse()) out.push(await this.statusFor(u, opts.fresh === true));
+      for (const u of await this.inUse()) out.push(await this.statusFor(u, fresh));
       return out;
     })().finally(() => {
-      this.inflight = null;
+      if (this.inflight === run) this.inflight = null;
     });
-    return this.inflight;
+    this.inflight = run;
+    return run;
   }
 
   /** Status for the image reference + image ID (e.g. of a Compose service's running container). */
