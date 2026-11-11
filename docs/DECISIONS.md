@@ -65,7 +65,8 @@ NOTE items RT-31 (version negotiation), RT-33 (Compose versions shown per projec
 - **Deviations / choices:** one update schedule targets one project/container; standalone containers are never auto-updated; `update_order` is only a tie-breaker inside the dependency order; `maxParallel` is fixed to 1; the clock is injectable (`ctx.clock`) so tests can move time; notification `MAX_ATTEMPTS` is 5 total sends.
 
 ### Not finished in this session (honest status)
+
 - Standalone-container update by config clone (RT-12) is NOT implemented (plans only cover Compose projects; the permits for create/rename/network exist).
 - "Restore previous state" API (RT-14) and a real SMTP/Telegram round trip are not implemented/tested.
 - Integration tests for: successful dependency-ordered update, broken image → rollback, rollback disabled, pull failure during a run, invalid Compose file, window closing mid-run, approval expiry/staleness, critical never auto-updated, crash → interrupted, cleanup protections are NOT written yet. `test/integration/updates.int.test.ts` (detection, dry run, standalone pull) exists but fails: see the task comment for the failure analysis.
-- Unit tests for planner ordering, policy resolution, health state machine, registry client (mocked HTTP) are NOT written yet (window/cron/DST and notifications unit tests exist).
+- Unit tests exist and pass for window/cron/DST, notifications, planner ordering + plan hash, policy resolution, health state machine, update classification and the registry client (mocked HTTP). Unit tests for the run state machine as a whole (executor with a fake Docker) are not written.
