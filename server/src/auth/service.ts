@@ -159,6 +159,20 @@ export class AuthService {
     this.emit({ sessionIdHashes: [ctx.session.id_hash] });
   }
 
+  /** Sessions of one user (for the "my sessions" list). */
+  listSessions(userId: number): SessionRow[] {
+    return this.d.sessions.listForUser(userId);
+  }
+
+  /** Revokes one of the user's own sessions (not the current one). Returns false when it is not theirs. */
+  revokeSession(userId: number, idHash: string, exceptIdHash: string): boolean {
+    const row = this.d.sessions.get(idHash);
+    if (!row || row.user_id !== userId || row.id_hash === exceptIdHash) return false;
+    this.d.sessions.delete(idHash);
+    this.emit({ sessionIdHashes: [idHash] });
+    return true;
+  }
+
   logoutAll(userId: number): void {
     this.d.sessions.deleteForUser(userId);
     this.emit({ userId });

@@ -34,6 +34,12 @@ export class SessionsRepo {
     this.db.prepare('DELETE FROM sessions WHERE id_hash = ?').run(idHash);
   }
 
+  listForUser(userId: number): SessionRow[] {
+    return this.db
+      .prepare('SELECT * FROM sessions WHERE user_id = ? ORDER BY last_seen DESC')
+      .all(userId) as SessionRow[];
+  }
+
   /** Deletes every session of a user (optionally keeping one) and returns the removed hashes. */
   deleteForUser(userId: number, exceptIdHash?: string): string[] {
     const rows = this.db

@@ -38,6 +38,13 @@ export class StatsRepo {
       .all(containerId, sinceMinute, limit) as RollupRow[];
   }
 
+  /** Every container's roll-ups since a minute (dashboard overview). */
+  since(sinceMinute: number, limit = 100_000): RollupRow[] {
+    return this.db
+      .prepare('SELECT * FROM stats_rollups WHERE minute >= ? ORDER BY container_id, minute LIMIT ?')
+      .all(sinceMinute, limit) as RollupRow[];
+  }
+
   prune(olderThanMinute: number, batch = 5000): number {
     return this.db
       .prepare(

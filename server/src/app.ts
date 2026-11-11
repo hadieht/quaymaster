@@ -5,7 +5,6 @@ import type { ErrorEnvelope } from '@quaymaster/shared';
 import type { AuthContext, Permission } from './auth/service.js';
 import type { AppContext } from './context.js';
 import { existsSync, readFileSync } from 'node:fs';
-import type { ServerResponse } from 'node:http';
 import path from 'node:path';
 import fastifyStatic from '@fastify/static';
 import { SECURITY_HEADERS } from './http/sse.js';
@@ -18,6 +17,7 @@ import { registerMiscRoutes } from './routes/misc.js';
 import { registerMaintenanceRoutes } from './routes/maintenance.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
 import { registerUpdateRoutes } from './routes/updates.js';
+import { registerWebApiRoutes } from './routes/webapi.js';
 import { registerStreamRoutes } from './routes/streams.js';
 import { registerSystemRoutes } from './routes/system.js';
 import { AppError, forbidden, unauthorized } from './util/errors.js';
@@ -235,7 +235,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       wildcard: true,
       index: ['index.html'],
       setHeaders: (res, filePath) => {
-        (res as unknown as ServerResponse).setHeader(
+        res.header(
           'Cache-Control',
           filePath.includes(`${path.sep}assets${path.sep}`)
             ? 'public, max-age=31536000, immutable'
@@ -257,6 +257,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       registerUpdateRoutes(api, ctx);
       registerMaintenanceRoutes(api, ctx);
       registerNotificationRoutes(api, ctx);
+      registerWebApiRoutes(api, ctx);
       registerStreamRoutes(api, ctx);
     },
     { prefix },
