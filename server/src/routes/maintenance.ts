@@ -141,6 +141,14 @@ export function registerMaintenanceRoutes(app: FastifyInstance, ctx: AppContext)
       if (!['global', 'project', 'service', 'container'].includes(kind))
         throw badRequest('Unknown policy scope');
       const key = policyKey(kind, decodeURIComponent(req.params.key));
+      // F-06 (RT-03): a policy for something outside QM_MANAGED_SCOPE could only ever be dead or misleading config
+      const scopeName = kind === 'service' ? key.split('/')[0] : kind === 'global' ? null : key;
+      if (scopeName && !ctx.guard.inScope(scopeName))
+        throw new AppError(
+          409,
+          'out_of_scope',
+          `Refused: "${scopeName}" is outside QM_MANAGED_SCOPE, so no policy can be set for it`,
+        );
       const policy = validatePolicy(req.body);
       if (policy.health?.probe) await verifyProbe(policy.health.probe.url, policy.health.probe.expectStatus);
       ctx.policiesRepo.put(kind, key, policy);

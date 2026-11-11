@@ -530,6 +530,26 @@ export class Planner {
       });
     }
 
+    // F-06 (RT-03): the tag moves for EVERY container that uses it; never for ones outside the managed scope
+    // (or protected ones, e.g. Quaymaster itself), because the next recreate of those would deploy the new image
+    {
+      const fenced: string[] = [];
+      for (const t of impact.sharedTag) {
+        const c = allContainers.find((x) => (x.Names?.[0] ?? '').replace(/^\//, '') === t.containerName);
+        if (!c) continue;
+        const r = this.d.guard.containerRefusal({ id: c.Id, name: t.containerName, project: t.project });
+        if (r && r.code !== 'read_only') fenced.push(t.containerName);
+      }
+      checks.push({
+        name: 'containers sharing the image tag are within the managed scope',
+        ok: fenced.length === 0,
+        detail:
+          fenced.length === 0
+            ? 'ok'
+            : `${fenced.join(', ')} use the same tag but are outside QM_MANAGED_SCOPE or protected; moving the tag would change what they run on their next recreate`,
+      });
+    }
+
     // ---- preflight checks
     if (!req.allowUnhealthy) {
       for (const [name, f] of facts) {

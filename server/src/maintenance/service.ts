@@ -933,6 +933,18 @@ export class MaintenanceService {
               }).updateMode,
           );
           if (!modes.some((m) => m === 'pull_only' || m === 'auto')) continue;
+          // F-06 (RT-03): a background job must respect the managed scope: only images whose EVERY user is in scope
+          if (
+            st.usedBy.some(
+              (u) =>
+                this.d.guard.containerRefusal({
+                  id: u.containerId,
+                  name: u.containerName,
+                  project: u.project ?? null,
+                }) !== null,
+            )
+          )
+            continue;
           const ref = parseImageRef(st.ref);
           if (!ref || !st.remoteDigest) continue;
           try {

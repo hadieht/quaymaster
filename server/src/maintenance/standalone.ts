@@ -73,6 +73,24 @@ export class StandaloneUpdater {
     if (!st) throw new AppError(409, 'conflict', 'No update information for this container’s image');
     if ((st.state !== 'update_available' && st.state !== 'update_staged') || !st.remoteDigest)
       throw new AppError(409, 'conflict', `The image is ${st.state}; there is nothing to update`);
+    // F-06 (RT-03): the tag moves for every container that uses it; refuse when that includes fenced-off ones
+    const fenced = st.usedBy
+      .filter((u) => u.containerId !== c.id)
+      .filter((u) => {
+        const r = this.d.guard.containerRefusal({
+          id: u.containerId,
+          name: u.containerName,
+          project: u.project,
+        });
+        return r !== null && r.code !== 'read_only';
+      })
+      .map((u) => u.containerName);
+    if (fenced.length > 0)
+      throw new AppError(
+        409,
+        'out_of_scope',
+        `Refused: ${fenced.join(', ')} use the same image tag but are outside QM_MANAGED_SCOPE or protected`,
+      );
     const pol = this.d.resolver.resolve({ project: null, service: null, container: c.name });
     if (pol.updateMode === 'ignore')
       throw new AppError(409, 'conflict', 'The update policy of this container is "ignore"');
