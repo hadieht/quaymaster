@@ -264,6 +264,11 @@ outside the run.
   order-dependent: leftover `quaymaster-rollback/*` / `quaymaster-staged/*` tags from earlier runs. Phase 2 reported 244/244,
   and its handoff mentions another flaky scenario in `maintenance.int.test.ts`. The suite is therefore not reliably green.
 - Full `npm test`, run 2: **aborted** at the operator's pause (no result).
+- Full `npm test`, run 3 (after the pause was lifted, all `qmtest-*` fixtures cleaned first): **17 files (16 passed, 1 skipped),
+  250 tests: 244 passed, 0 failed, 6 skipped** (the 6 skipped are the audit demos), in 628 s, exit 0. The run 1 failure did not
+  recur. Together with phase 2's flake, this supports the reading that the suite is order- and leftover-sensitive, not broken.
+  Separately, `redaction.int.test.ts` has no fixture teardown (`afterAll` only closes the app, lines 26-28). After a green
+  run, `qmtest-secrets-leaky-1` is left running, which breaks AGENTS.md rule 6 (LOW, test hygiene).
 - Audit demos (`QM_AUDIT_DEMOS=1`): F-01, F-02, F-03 and F-05 fail as intended (evidence above). F-04 failed as intended in
   the second run; in the first run the registry had nothing newer to pull. F-06 passes, which means it did not reproduce
   (see F-07). With the flag unset, all 6 are skipped.
@@ -272,10 +277,11 @@ outside the run.
 
 ## Not done
 
-- Cleanup of fixtures. They were left untouched because Docker work is paused: `qmtest-upd-app-1` and `qmtest-upd-worker-1`
-  (Created), `qmtest-upd-db-1` (Up) and `qmtest-registry` (Up), all labelled `quaymaster.test=true`. The dev server is stopped.
-  `test-fixtures/scripts/upd-down.sh` and `registry-down.sh` must be run once atlas lifts the pause.
-- A clean full-suite rerun.
+- Nothing from the audit plan remains. After the pause was lifted, `upd-down.sh`, `registry-down.sh` and `down.sh` were run.
+  Afterwards no container, image, volume or network labelled `quaymaster.test=true` (or named `qmtest-*`) was left,
+  and no dev server was running.
+- F-06 was not reproduced (see F-07). The real Docker Hub and GHCR registries were not contacted. The scheduler was exercised
+  through the kill -9 / restart harness and `tick()`, not through a long-running real timer.
 
 ## Verdict
 
