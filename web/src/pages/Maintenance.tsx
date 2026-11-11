@@ -40,7 +40,9 @@ function Overview() {
             {running.map((r) => (
               <li key={r.id} className="flex items-center gap-3 px-4 py-3 text-sm">
                 <RunBadge status={r.status} />
-                <Link to={`/maintenance/runs/${r.id}`} className="font-medium hover:text-accent">{r.target}</Link>
+                <Link to={`/maintenance/runs/${r.id}`} className="font-medium hover:text-accent">
+                  {r.target}
+                </Link>
                 <span className="text-muted">{runDuration(r)}</span>
               </li>
             ))}
@@ -50,12 +52,17 @@ function Overview() {
       <Card>
         <CardHeader title="Upcoming" description="Next scheduled tasks" />
         {upcoming.length === 0 ? (
-          <EmptyState icon="calendar" title="Nothing scheduled">Create a schedule to check for updates regularly.</EmptyState>
+          <EmptyState icon="calendar" title="Nothing scheduled">
+            Create a schedule to check for updates regularly.
+          </EmptyState>
         ) : (
           <ol className="relative ml-6 space-y-4 border-l border-border py-4 pr-4">
             {upcoming.map(({ s, at }) => (
               <li key={s.id} className="relative pl-4">
-                <span className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-accent" aria-hidden />
+                <span
+                  className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-accent"
+                  aria-hidden
+                />
                 <div className="text-sm font-medium">{s.name}</div>
                 <div className="text-xs text-muted">
                   {dateTime(at)} ({relativeTime(at)}) · {describeCron(s.cron) ?? s.cron}
@@ -68,14 +75,36 @@ function Overview() {
       <Card>
         <CardHeader title="Status" />
         <CardBody className="space-y-3 text-sm">
-          <div className="flex justify-between"><span className="text-muted">Updates available</span><span className="font-medium">{available}</span></div>
-          <div className="flex justify-between"><span className="text-muted">Staged (downloaded)</span><span className="font-medium">{staged.data?.staged.length ?? 0}</span></div>
-          <div className="flex justify-between"><span className="text-muted">Waiting for approval</span><span className="font-medium">{waiting.length}</span></div>
+          <div className="flex justify-between">
+            <span className="text-muted">Updates available</span>
+            <span className="font-medium">{available}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted">Staged (downloaded)</span>
+            <span className="font-medium">{staged.data?.staged.length ?? 0}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted">Waiting for approval</span>
+            <span className="font-medium">{waiting.length}</span>
+          </div>
           <div>
             <div className="mb-1 text-muted">Maintenance windows</div>
-            {(windows.data?.windows ?? []).length === 0 ? <span className="text-muted">None defined</span> : (windows.data?.windows ?? []).map((w) => (
-              <div key={w.id} className="flex items-center gap-2"><span>{w.name}</span>{w.openNow ? <Badge tone="healthy">open now</Badge> : <Badge tone="inactive">{w.nextStart ? `next ${relativeTime(w.nextStart)}` : 'closed'}</Badge>}</div>
-            ))}
+            {(windows.data?.windows ?? []).length === 0 ? (
+              <span className="text-muted">None defined</span>
+            ) : (
+              (windows.data?.windows ?? []).map((w) => (
+                <div key={w.id} className="flex items-center gap-2">
+                  <span>{w.name}</span>
+                  {w.openNow ? (
+                    <Badge tone="healthy">open now</Badge>
+                  ) : (
+                    <Badge tone="inactive">
+                      {w.nextStart ? `next ${relativeTime(w.nextStart)}` : 'closed'}
+                    </Badge>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </CardBody>
       </Card>
@@ -92,7 +121,11 @@ export default function MaintenancePage() {
   const qc = useQueryClient();
   const runs = useQuery(q.runs(100));
   const sub = loc.pathname.replace(/^\/maintenance\/?/, '').split('/')[0] || 'overview';
-  const tab = (['overview', 'schedules', 'plan', 'approvals', 'runs', 'policies'] as Tab[]).includes(sub as Tab) ? (sub as Tab) : 'overview';
+  const tab = (['overview', 'schedules', 'plan', 'approvals', 'runs', 'policies'] as Tab[]).includes(
+    sub as Tab,
+  )
+    ? (sub as Tab)
+    : 'overview';
   const detail = sub === 'runs' && loc.pathname.split('/').length > 3;
 
   useEffect(
@@ -111,7 +144,10 @@ export default function MaintenancePage() {
   const waiting = (runs.data?.runs ?? []).filter((r) => r.status === 'awaiting_approval').length;
   return (
     <>
-      <PageHeader title="Maintenance" description="Plan, approve and review updates. Nothing changes without a plan you can read first." />
+      <PageHeader
+        title="Maintenance"
+        description="Plan, approve and review updates. Nothing changes without a plan you can read first."
+      />
       <ScopeNotice />
       {!detail ? (
         <Tabs<Tab>

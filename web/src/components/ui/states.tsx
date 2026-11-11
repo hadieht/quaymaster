@@ -6,7 +6,13 @@ import { Button } from './Button';
 
 export function Spinner({ className = 'h-5 w-5' }: { className?: string }) {
   return (
-    <svg className={cn('animate-spin text-accent', className)} viewBox="0 0 24 24" fill="none" role="status" aria-label="Loading">
+    <svg
+      className={cn('animate-spin text-accent', className)}
+      viewBox="0 0 24 24"
+      fill="none"
+      role="status"
+      aria-label="Loading"
+    >
       <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
       <path d="M21 12a9 9 0 00-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
     </svg>
@@ -19,7 +25,11 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function LoadingState({ label = 'Loading…', rows = 0 }: { label?: string; rows?: number }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-12 text-muted" role="status" aria-live="polite">
+    <div
+      className="flex flex-col items-center justify-center gap-3 py-12 text-muted"
+      role="status"
+      aria-live="polite"
+    >
       {rows > 0 ? (
         <div className="w-full space-y-2" aria-hidden="true">
           {Array.from({ length: rows }, (_, i) => (
@@ -57,7 +67,15 @@ export function EmptyState({
   );
 }
 
-export function ErrorState({ error, onRetry, title = 'Something went wrong' }: { error: unknown; onRetry?: () => void; title?: string }) {
+export function ErrorState({
+  error,
+  onRetry,
+  title = 'Something went wrong',
+}: {
+  error: unknown;
+  onRetry?: () => void;
+  title?: string;
+}) {
   return (
     <div role="alert" className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-critical/10 text-critical">
@@ -93,9 +111,17 @@ export function Notice({
     healthy: 'border-healthy/40 bg-healthy/10 text-fg',
   }[tone];
   const icon: IconName = tone === 'healthy' ? 'check' : tone === 'info' ? 'info' : 'alert';
-  const color = { info: 'text-info', warning: 'text-warning', critical: 'text-critical', healthy: 'text-healthy' }[tone];
+  const color = {
+    info: 'text-info',
+    warning: 'text-warning',
+    critical: 'text-critical',
+    healthy: 'text-healthy',
+  }[tone];
   return (
-    <div role={tone === 'critical' ? 'alert' : 'note'} className={cn('flex gap-3 rounded-lg border p-3 text-sm', t, className)}>
+    <div
+      role={tone === 'critical' ? 'alert' : 'note'}
+      className={cn('flex gap-3 rounded-lg border p-3 text-sm', t, className)}
+    >
       <Icon name={icon} className={cn('mt-0.5 h-4 w-4', color)} />
       <div className="min-w-0 flex-1">
         {title ? <div className="font-semibold">{title}</div> : null}

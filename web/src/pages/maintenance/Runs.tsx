@@ -7,7 +7,24 @@ import type { RunInfo, RunStep } from '@/api/types';
 import { RunBadge } from '@/components/domain/badges';
 import { OperationModal } from '@/components/domain/OperationModal';
 import { PlanView } from '@/components/domain/PlanView';
-import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, DataTable, EmptyState, ErrorState, KeyValue, LoadingState, Notice, Segmented, TabPanel, Tabs, type Column } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  ConfirmDialog,
+  DataTable,
+  EmptyState,
+  ErrorState,
+  KeyValue,
+  LoadingState,
+  Notice,
+  Segmented,
+  TabPanel,
+  Tabs,
+  type Column,
+} from '@/components/ui';
 import { dateTime, duration, relativeTime } from '@/lib/format';
 import { stepTone } from '@/lib/status';
 import { useGate } from '@/state/auth';
@@ -18,7 +35,13 @@ export function runDuration(r: RunInfo): string {
   return duration(Math.max(0, (end - Date.parse(r.startedAt)) / 1000));
 }
 
-const KIND_LABEL: Record<string, string> = { dry_run: 'Dry run', update: 'Update', image_check: 'Image check', image_pull: 'Image pull', cleanup_report: 'Cleanup report' };
+const KIND_LABEL: Record<string, string> = {
+  dry_run: 'Dry run',
+  update: 'Update',
+  image_check: 'Image check',
+  image_pull: 'Image pull',
+  cleanup_report: 'Cleanup report',
+};
 
 export function RunsList({ onlyApprovals = false }: { onlyApprovals?: boolean }) {
   const navigate = useNavigate();
@@ -26,15 +49,38 @@ export function RunsList({ onlyApprovals = false }: { onlyApprovals?: boolean })
   const [filter, setFilter] = useState<'all' | 'problems'>('all');
   const rows = (runs.data?.runs ?? []).filter((r) => {
     if (onlyApprovals) return r.status === 'awaiting_approval';
-    if (filter === 'problems') return ['failed', 'partial', 'rolled_back', 'interrupted', 'blocked', 'approval_stale'].includes(r.status);
+    if (filter === 'problems')
+      return ['failed', 'partial', 'rolled_back', 'interrupted', 'blocked', 'approval_stale'].includes(
+        r.status,
+      );
     return true;
   });
   const columns: Column<RunInfo>[] = [
-    { key: 'created', header: 'When', sort: (a, b) => a.createdAt.localeCompare(b.createdAt), cell: (r) => <span title={dateTime(r.createdAt)}>{relativeTime(r.createdAt)}</span> },
+    {
+      key: 'created',
+      header: 'When',
+      sort: (a, b) => a.createdAt.localeCompare(b.createdAt),
+      cell: (r) => <span title={dateTime(r.createdAt)}>{relativeTime(r.createdAt)}</span>,
+    },
     { key: 'kind', header: 'Kind', hideOnSmall: true, cell: (r) => KIND_LABEL[r.kind] ?? r.kind },
-    { key: 'target', header: 'Target', sort: (a, b) => a.target.localeCompare(b.target), cell: (r) => <span className="font-medium">{r.target}</span> },
-    { key: 'trigger', header: 'Trigger', hideOnSmall: true, cell: (r) => (r.trigger === 'schedule' ? 'schedule' : r.requestedBy) },
-    { key: 'status', header: 'Status', sort: (a, b) => a.status.localeCompare(b.status), cell: (r) => <RunBadge status={r.status} /> },
+    {
+      key: 'target',
+      header: 'Target',
+      sort: (a, b) => a.target.localeCompare(b.target),
+      cell: (r) => <span className="font-medium">{r.target}</span>,
+    },
+    {
+      key: 'trigger',
+      header: 'Trigger',
+      hideOnSmall: true,
+      cell: (r) => (r.trigger === 'schedule' ? 'schedule' : r.requestedBy),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sort: (a, b) => a.status.localeCompare(b.status),
+      cell: (r) => <RunBadge status={r.status} />,
+    },
     { key: 'dur', header: 'Duration', hideOnSmall: true, align: 'right', cell: (r) => runDuration(r) },
   ];
   if (runs.isLoading) return <LoadingState rows={4} />;
@@ -61,7 +107,13 @@ export function RunsList({ onlyApprovals = false }: { onlyApprovals?: boolean })
         columns={columns}
         initialSort={{ key: 'created', dir: 'desc' }}
         onRowClick={(r) => navigate(`/maintenance/runs/${r.id}`)}
-        empty={{ icon: 'wrench', title: onlyApprovals ? 'Nothing waits for approval' : 'No runs yet', text: onlyApprovals ? 'Planned updates that need a human decision appear here.' : 'Runs from schedules and manual updates are listed here.' }}
+        empty={{
+          icon: 'wrench',
+          title: onlyApprovals ? 'Nothing waits for approval' : 'No runs yet',
+          text: onlyApprovals
+            ? 'Planned updates that need a human decision appear here.'
+            : 'Runs from schedules and manual updates are listed here.',
+        }}
       />
     </Card>
   );
@@ -82,15 +134,25 @@ export function RunDetailPage() {
   const [confirm, setConfirm] = useState<'approve' | 'reject' | 'restore' | null>(null);
   const [restoreOp, setRestoreOp] = useState<string | null>(null);
 
-  const approve = useAction((hash: string) => api.post(`/maintenance/runs/${id}/approve`, { planHash: hash }), { success: 'Run approved and started', invalidate: ['run', 'runs'], quietError: true });
-  const reject = useAction(() => api.post(`/maintenance/runs/${id}/reject`, {}), { success: 'Run rejected', invalidate: ['run', 'runs'], quietError: true });
+  const approve = useAction(
+    (hash: string) => api.post(`/maintenance/runs/${id}/approve`, { planHash: hash }),
+    { success: 'Run approved and started', invalidate: ['run', 'runs'], quietError: true },
+  );
+  const reject = useAction(() => api.post(`/maintenance/runs/${id}/reject`, {}), {
+    success: 'Run rejected',
+    invalidate: ['run', 'runs'],
+    quietError: true,
+  });
 
   if (run.isLoading) return <LoadingState rows={5} />;
-  if (run.error || !run.data) return <ErrorState error={run.error ?? new Error('Run not found')} onRetry={() => void run.refetch()} />;
+  if (run.error || !run.data)
+    return <ErrorState error={run.error ?? new Error('Run not found')} onRetry={() => void run.refetch()} />;
   const r = run.data;
   const block = gate();
   const hasRecovery = r.steps.some((s) => s.step === 'recovery_point' && s.status === 'succeeded');
-  const bad = ['failed', 'partial', 'rolled_back', 'interrupted', 'blocked', 'approval_stale'].includes(r.status);
+  const bad = ['failed', 'partial', 'rolled_back', 'interrupted', 'blocked', 'approval_stale'].includes(
+    r.status,
+  );
 
   return (
     <>
@@ -99,19 +161,31 @@ export function RunDetailPage() {
           ← History
         </Link>
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-semibold">{KIND_LABEL[r.kind] ?? r.kind}: {r.target}</h1>
+          <h1 className="text-xl font-semibold">
+            {KIND_LABEL[r.kind] ?? r.kind}: {r.target}
+          </h1>
           <RunBadge status={r.status} />
         </div>
         <p className="mt-1 text-sm text-muted">
-          {r.trigger === 'schedule' ? 'Scheduled' : `Requested by ${r.requestedBy}`} · {dateTime(r.createdAt)} · {runDuration(r)}
+          {r.trigger === 'schedule' ? 'Scheduled' : `Requested by ${r.requestedBy}`} · {dateTime(r.createdAt)}{' '}
+          · {runDuration(r)}
         </p>
       </div>
 
       {r.status === 'awaiting_approval' ? (
         <Notice tone="warning" title="Waiting for your approval" className="mb-4">
-          <p className="mb-2">Review the plan, then approve exactly this plan. If anything changed in the meantime, approval is refused and the plan must be created again.{r.approvalExpiresAt ? ` Approval expires ${relativeTime(r.approvalExpiresAt)}.` : ''}</p>
+          <p className="mb-2">
+            Review the plan, then approve exactly this plan. If anything changed in the meantime, approval is
+            refused and the plan must be created again.
+            {r.approvalExpiresAt ? ` Approval expires ${relativeTime(r.approvalExpiresAt)}.` : ''}
+          </p>
           <div className="flex gap-2">
-            <Button variant="primary" icon="check" disabledReason={block ?? (r.planHash ? null : 'This run has no plan.')} onClick={() => setConfirm('approve')}>
+            <Button
+              variant="primary"
+              icon="check"
+              disabledReason={block ?? (r.planHash ? null : 'This run has no plan.')}
+              onClick={() => setConfirm('approve')}
+            >
               Approve…
             </Button>
             <Button variant="danger" icon="x" disabledReason={block} onClick={() => setConfirm('reject')}>
@@ -122,7 +196,11 @@ export function RunDetailPage() {
       ) : null}
 
       {bad ? (
-        <Notice tone="critical" title={r.status === 'rolled_back' ? 'The update was rolled back' : 'This run needs attention'} className="mb-4">
+        <Notice
+          tone="critical"
+          title={r.status === 'rolled_back' ? 'The update was rolled back' : 'This run needs attention'}
+          className="mb-4"
+        >
           {r.reason ? <p className="mb-2">{r.reason}</p> : null}
           {r.guidance?.length ? (
             <ul className="list-disc space-y-1 pl-5">
@@ -151,7 +229,19 @@ export function RunDetailPage() {
               {r.result.services.map((s) => (
                 <li key={s.service} className="flex flex-wrap items-center gap-2">
                   <b>{s.service}</b>
-                  <Badge tone={s.outcome === 'updated' || s.outcome === 'dependent_recreated' ? 'healthy' : s.outcome === 'skipped' ? 'inactive' : s.outcome === 'rolled_back' ? 'warning' : 'critical'}>{s.outcome.replace(/_/g, ' ')}</Badge>
+                  <Badge
+                    tone={
+                      s.outcome === 'updated' || s.outcome === 'dependent_recreated'
+                        ? 'healthy'
+                        : s.outcome === 'skipped'
+                          ? 'inactive'
+                          : s.outcome === 'rolled_back'
+                            ? 'warning'
+                            : 'critical'
+                    }
+                  >
+                    {s.outcome.replace(/_/g, ' ')}
+                  </Badge>
                   <span className="text-muted">{s.detail}</span>
                 </li>
               ))}
@@ -179,15 +269,27 @@ export function RunDetailPage() {
                 ['Status', <RunBadge key="s" status={r.status} />],
                 ['Started', r.startedAt ? dateTime(r.startedAt) : 'not started'],
                 ['Finished', r.finishedAt ? dateTime(r.finishedAt) : '–'],
-                ['Approved by', r.approvedBy ? `${r.approvedBy} (${r.approvedAt ? dateTime(r.approvedAt) : ''})` : '–'],
-                ['Plan hash', <span key="h" className="break-all font-mono text-xs">{r.planHash ?? '–'}</span>],
+                [
+                  'Approved by',
+                  r.approvedBy ? `${r.approvedBy} (${r.approvedAt ? dateTime(r.approvedAt) : ''})` : '–',
+                ],
+                [
+                  'Plan hash',
+                  <span key="h" className="break-all font-mono text-xs">
+                    {r.planHash ?? '–'}
+                  </span>,
+                ],
               ]}
             />
           </CardBody>
         </Card>
       </TabPanel>
       <TabPanel id="plan" tab={tab}>
-        {r.plan ? <PlanView plan={r.plan} /> : <EmptyState icon="wrench" title="No plan stored for this run" />}
+        {r.plan ? (
+          <PlanView plan={r.plan} />
+        ) : (
+          <EmptyState icon="wrench" title="No plan stored for this run" />
+        )}
       </TabPanel>
       <TabPanel id="steps" tab={tab}>
         <Card>
@@ -198,7 +300,9 @@ export function RunDetailPage() {
                 <span className="font-medium">{s.step}</span>
                 {s.service ? <span className="text-muted">{s.service}</span> : null}
                 <span className="ml-auto text-xs text-muted">{dateTime(s.startedAt)}</span>
-                {stepSummary(s) ? <p className="w-full break-words font-mono text-xs text-muted">{stepSummary(s)}</p> : null}
+                {stepSummary(s) ? (
+                  <p className="w-full break-words font-mono text-xs text-muted">{stepSummary(s)}</p>
+                ) : null}
               </li>
             ))}
             {r.steps.length === 0 ? <li className="p-4 text-sm text-muted">No steps recorded yet.</li> : null}
@@ -210,9 +314,28 @@ export function RunDetailPage() {
       </TabPanel>
 
       {confirm === 'approve' && r.planHash ? (
-        <ConfirmDialog open onClose={() => setConfirm(null)} title="Approve this plan" target={r.target} variant="primary" confirmLabel="Approve and run" impact="The services in this plan are updated now, in the planned order, with the safety checks and rollback rules shown there. Expect the downtime listed in the plan." onConfirm={() => approve.mutateAsync(r.planHash as string)} />
+        <ConfirmDialog
+          open
+          onClose={() => setConfirm(null)}
+          title="Approve this plan"
+          target={r.target}
+          variant="primary"
+          confirmLabel="Approve and run"
+          impact="The services in this plan are updated now, in the planned order, with the safety checks and rollback rules shown there. Expect the downtime listed in the plan."
+          onConfirm={() => approve.mutateAsync(r.planHash as string)}
+        />
       ) : null}
-      {confirm === 'reject' ? <ConfirmDialog open onClose={() => setConfirm(null)} title="Reject this plan" target={r.target} confirmLabel="Reject" impact="Nothing is changed. The plan is discarded." onConfirm={() => reject.mutateAsync(undefined)} /> : null}
+      {confirm === 'reject' ? (
+        <ConfirmDialog
+          open
+          onClose={() => setConfirm(null)}
+          title="Reject this plan"
+          target={r.target}
+          confirmLabel="Reject"
+          impact="Nothing is changed. The plan is discarded."
+          onConfirm={() => reject.mutateAsync(undefined)}
+        />
+      ) : null}
       {confirm === 'restore' ? (
         <ConfirmDialog
           open
@@ -223,22 +346,36 @@ export function RunDetailPage() {
           confirmLabel="Restore"
           impact="The services of this run are recreated from the images saved before the update. Their data is not rolled back; if the new version migrated a database, check compatibility first."
           onConfirm={async () => {
-            const res = await api.post<{ operationId: string }>(`/maintenance/runs/${id}/restore`, { confirm: r.target });
+            const res = await api.post<{ operationId: string }>(`/maintenance/runs/${id}/restore`, {
+              confirm: r.target,
+            });
             setRestoreOp(res.operationId);
           }}
         />
       ) : null}
-      <OperationModal operationId={restoreOp} title={`Restore ${r.target}`} onClose={() => setRestoreOp(null)} />
+      <OperationModal
+        operationId={restoreOp}
+        title={`Restore ${r.target}`}
+        onClose={() => setRestoreOp(null)}
+      />
     </>
   );
 }
 
 function RunOutput({ id, live }: { id: string; live: boolean }) {
-  const op = useQuery({ queryKey: ['operation', id], queryFn: () => api.get<{ output: string }>(`/operations/${id}`), refetchInterval: live ? 2000 : false, retry: false });
+  const op = useQuery({
+    queryKey: ['operation', id],
+    queryFn: () => api.get<{ output: string }>(`/operations/${id}`),
+    refetchInterval: live ? 2000 : false,
+    retry: false,
+  });
   if (op.isLoading) return <LoadingState />;
   if (op.error) return <EmptyState icon="scroll" title="No output stored for this run" />;
   return (
-    <pre aria-label="Run output" className="qm-scroll max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 p-3 font-mono text-xs leading-5">
+    <pre
+      aria-label="Run output"
+      className="qm-scroll max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-surface-2 p-3 font-mono text-xs leading-5"
+    >
       {op.data?.output || 'No output.'}
     </pre>
   );

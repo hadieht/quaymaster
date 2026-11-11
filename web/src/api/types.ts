@@ -1,4 +1,9 @@
-import type { ComposeServiceInfo, ComposeProjectSummary, ContainerSummary, DependencyGraph } from '@quaymaster/shared';
+import type {
+  ComposeServiceInfo,
+  ComposeProjectSummary,
+  ContainerSummary,
+  DependencyGraph,
+} from '@quaymaster/shared';
 
 export * from '@quaymaster/shared';
 
@@ -19,7 +24,11 @@ export interface InspectData {
     Error?: string;
     StartedAt: string;
     FinishedAt: string;
-    Health?: { Status: string; FailingStreak: number; Log?: { ExitCode: number; Output: string; End: string }[] };
+    Health?: {
+      Status: string;
+      FailingStreak: number;
+      Log?: { ExitCode: number; Output: string; End: string }[];
+    };
   };
   RestartCount?: number;
   Image: string;
@@ -42,7 +51,10 @@ export interface InspectData {
   };
   Mounts?: { Type: string; Name?: string; Source: string; Destination: string; RW: boolean; Mode?: string }[];
   NetworkSettings?: {
-    Networks?: Record<string, { IPAddress?: string; Gateway?: string; Aliases?: string[] | null; MacAddress?: string }>;
+    Networks?: Record<
+      string,
+      { IPAddress?: string; Gateway?: string; Aliases?: string[] | null; MacAddress?: string }
+    >;
     Ports?: Record<string, { HostIp: string; HostPort: string }[] | null>;
   };
 }
@@ -145,10 +157,22 @@ export interface RollbackPoint {
 /** `GET /system/settings` (added in phase 3): operational, non-secret configuration. */
 export interface SystemSettings {
   version: string;
-  retention: { eventDays: number; auditDays: number; statsHours: number; rollbackDays: number; cleanupMinAgeHours: number; approvalExpiryHours: number };
+  retention: {
+    eventDays: number;
+    auditDays: number;
+    statsHours: number;
+    rollbackDays: number;
+    cleanupMinAgeHours: number;
+    approvalExpiryHours: number;
+  };
   session: { idleMinutes: number; absoluteHours: number };
   limits: { sseMaxPerSession: number; sseMaxTotal: number; diskFloorBytes: number };
-  security: { cookieSecure: boolean; publicOrigins: string[]; redactAllEnv: boolean; protectedNames: string[] };
+  security: {
+    cookieSecure: boolean;
+    publicOrigins: string[];
+    redactAllEnv: boolean;
+    protectedNames: string[];
+  };
 }
 
 export interface SessionEntry {
@@ -166,4 +190,3 @@ export interface CronPreview {
   error: string | null;
   nextRuns: string[];
 }
-

@@ -18,19 +18,33 @@ export function exitCodeOf(status: string): number | null {
 export function needsAttention(containers: ContainerSummary[]): AttentionItem[] {
   const out: AttentionItem[] = [];
   for (const c of containers) {
-    if (c.state === 'restarting') out.push({ container: c, reason: 'restarting', detail: 'Restart loop: the process keeps exiting.' });
-    else if (c.state === 'dead') out.push({ container: c, reason: 'dead', detail: 'The container is dead and cannot be started.' });
+    if (c.state === 'restarting')
+      out.push({ container: c, reason: 'restarting', detail: 'Restart loop: the process keeps exiting.' });
+    else if (c.state === 'dead')
+      out.push({ container: c, reason: 'dead', detail: 'The container is dead and cannot be started.' });
     else if (c.state === 'running' && c.health === 'unhealthy')
       out.push({ container: c, reason: 'unhealthy', detail: 'Its health check is failing.' });
     else if (c.state === 'exited') {
       const code = exitCodeOf(c.status);
       if (code !== null && code !== 0 && code !== 143) {
-        out.push({ container: c, reason: 'crashed', detail: `Exited with code ${code}${code === 137 ? ' (killed, possibly out of memory)' : ''}.` });
+        out.push({
+          container: c,
+          reason: 'crashed',
+          detail: `Exited with code ${code}${code === 137 ? ' (killed, possibly out of memory)' : ''}.`,
+        });
       }
     }
   }
-  const rank: Record<AttentionReason, number> = { restarting: 0, dead: 1, unhealthy: 2, crashed: 3, starting: 4 };
-  return out.sort((a, b) => rank[a.reason] - rank[b.reason] || a.container.name.localeCompare(b.container.name));
+  const rank: Record<AttentionReason, number> = {
+    restarting: 0,
+    dead: 1,
+    unhealthy: 2,
+    crashed: 3,
+    starting: 4,
+  };
+  return out.sort(
+    (a, b) => rank[a.reason] - rank[b.reason] || a.container.name.localeCompare(b.container.name),
+  );
 }
 
 export interface ContainerCounts {
@@ -43,7 +57,14 @@ export interface ContainerCounts {
 }
 
 export function countContainers(list: ContainerSummary[]): ContainerCounts {
-  const n: ContainerCounts = { total: list.length, running: 0, stopped: 0, restarting: 0, unhealthy: 0, paused: 0 };
+  const n: ContainerCounts = {
+    total: list.length,
+    running: 0,
+    stopped: 0,
+    restarting: 0,
+    unhealthy: 0,
+    paused: 0,
+  };
   for (const c of list) {
     if (c.state === 'running') n.running++;
     else if (c.state === 'restarting') n.restarting++;

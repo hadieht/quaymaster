@@ -23,7 +23,7 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
   override render() {
     if (!this.state.error) return this.props.children;
     const card = (
-      <Card className="mx-auto max-w-lg p-8 text-center" >
+      <Card className="mx-auto max-w-lg p-8 text-center">
         <div role="alert" className="flex flex-col items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-critical/10 text-critical">
             <Icon name="alert" className="h-6 w-6" />
@@ -39,6 +39,10 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
         </div>
       </Card>
     );
-    return this.props.level === 'root' ? <div className="flex h-full items-center justify-center p-4">{card}</div> : card;
+    return this.props.level === 'root' ? (
+      <div className="flex h-full items-center justify-center p-4">{card}</div>
+    ) : (
+      card
+    );
   }
 }

@@ -104,7 +104,13 @@ export function outcomeTone(o: 'success' | 'failure' | 'denied'): Tone {
 }
 
 export function deliveryTone(s: DeliveryStatus): Tone {
-  return s === 'sent' ? 'healthy' : s === 'failed' || s === 'dead' ? 'critical' : s === 'pending' ? 'info' : 'inactive';
+  return s === 'sent'
+    ? 'healthy'
+    : s === 'failed' || s === 'dead'
+      ? 'critical'
+      : s === 'pending'
+        ? 'info'
+        : 'inactive';
 }
 
 export function capabilityTone(l: CapabilityLevel): Tone {
@@ -127,10 +133,37 @@ export const CAPABILITY_TEXT: Record<CapabilityLevel, { label: string; text: str
 };
 
 /** Border / text / background classes for each tone (kept literal so Tailwind sees them). */
-export const TONE_CLASSES: Record<Tone, { text: string; bg: string; border: string; dot: string; bar: string }> = {
-  healthy: { text: 'text-healthy', bg: 'bg-healthy/10', border: 'border-healthy/30', dot: 'bg-healthy', bar: 'bg-healthy' },
-  warning: { text: 'text-warning', bg: 'bg-warning/10', border: 'border-warning/30', dot: 'bg-warning', bar: 'bg-warning' },
-  critical: { text: 'text-critical', bg: 'bg-critical/10', border: 'border-critical/30', dot: 'bg-critical', bar: 'bg-critical' },
-  inactive: { text: 'text-inactive', bg: 'bg-inactive/10', border: 'border-inactive/30', dot: 'bg-inactive', bar: 'bg-inactive' },
+export const TONE_CLASSES: Record<
+  Tone,
+  { text: string; bg: string; border: string; dot: string; bar: string }
+> = {
+  healthy: {
+    text: 'text-healthy',
+    bg: 'bg-healthy/10',
+    border: 'border-healthy/30',
+    dot: 'bg-healthy',
+    bar: 'bg-healthy',
+  },
+  warning: {
+    text: 'text-warning',
+    bg: 'bg-warning/10',
+    border: 'border-warning/30',
+    dot: 'bg-warning',
+    bar: 'bg-warning',
+  },
+  critical: {
+    text: 'text-critical',
+    bg: 'bg-critical/10',
+    border: 'border-critical/30',
+    dot: 'bg-critical',
+    bar: 'bg-critical',
+  },
+  inactive: {
+    text: 'text-inactive',
+    bg: 'bg-inactive/10',
+    border: 'border-inactive/30',
+    dot: 'bg-inactive',
+    bar: 'bg-inactive',
+  },
   info: { text: 'text-info', bg: 'bg-info/10', border: 'border-info/30', dot: 'bg-info', bar: 'bg-info' },
 };

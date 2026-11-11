@@ -1,7 +1,6 @@
 import path from 'node:path';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
-import type { InlineConfig } from 'vitest/node';
 
 // Dev: the SPA runs on 5173 and proxies /api to the Quaymaster server. The server checks the Origin header
 // of mutating requests, so the proxy rewrites it to the target's own origin.
@@ -37,7 +36,10 @@ export default defineConfig({
     chunkSizeWarningLimit: 700,
     rollupOptions: {
       output: {
-        manualChunks: { charts: ['recharts'], vendor: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'] },
+        manualChunks: {
+          charts: ['recharts'],
+          vendor: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+        },
       },
     },
   },

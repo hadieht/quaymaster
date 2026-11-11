@@ -38,7 +38,12 @@ export function Tabs<K extends string>({
     }
   };
   return (
-    <div role="tablist" aria-label={label} onKeyDown={onKey} className="qm-scroll flex gap-1 overflow-x-auto border-b border-border">
+    <div
+      role="tablist"
+      aria-label={label}
+      onKeyDown={onKey}
+      className="qm-scroll flex gap-1 overflow-x-auto border-b border-border"
+    >
       {tabs.map((t) => {
         const active = t.key === value;
         return (
@@ -60,7 +65,9 @@ export function Tabs<K extends string>({
           >
             {t.label}
             {t.count !== undefined ? (
-              <span className="rounded-full bg-surface-2 px-1.5 text-xs tabular-nums text-muted">{t.count}</span>
+              <span className="rounded-full bg-surface-2 px-1.5 text-xs tabular-nums text-muted">
+                {t.count}
+              </span>
             ) : null}
           </button>
         );
@@ -69,10 +76,25 @@ export function Tabs<K extends string>({
   );
 }
 
-export function TabPanel({ id, tab, children, idPrefix = 'tab' }: { id: string; tab: string; children: ReactNode; idPrefix?: string }) {
+export function TabPanel({
+  id,
+  tab,
+  children,
+  idPrefix = 'tab',
+}: {
+  id: string;
+  tab: string;
+  children: ReactNode;
+  idPrefix?: string;
+}) {
   if (id !== tab) return null;
   return (
-    <div role="tabpanel" id={`${idPrefix}-panel-${id}`} aria-labelledby={`${idPrefix}-${id}`} className="pt-4">
+    <div
+      role="tabpanel"
+      id={`${idPrefix}-panel-${id}`}
+      aria-labelledby={`${idPrefix}-${id}`}
+      className="pt-4"
+    >
       {children}
     </div>
   );
@@ -91,7 +113,11 @@ export function Segmented<K extends string>({
   label: string;
 }) {
   return (
-    <div role="group" aria-label={label} className="inline-flex flex-wrap rounded-lg border border-border bg-surface p-0.5">
+    <div
+      role="group"
+      aria-label={label}
+      className="inline-flex flex-wrap rounded-lg border border-border bg-surface p-0.5"
+    >
       {options.map((o) => (
         <button
           key={o.key}

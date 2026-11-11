@@ -63,7 +63,9 @@ function LiveDot() {
   return (
     <span className="inline-flex items-center gap-2 text-xs text-muted" title={label}>
       <span className={cn('h-2 w-2 rounded-full', dot, status === 'live' && 'animate-pulse')} />
-      <span className="hidden sm:inline">{status === 'live' ? 'Live' : status === 'closed' ? 'Offline' : 'Reconnecting'}</span>
+      <span className="hidden sm:inline">
+        {status === 'live' ? 'Live' : status === 'closed' ? 'Offline' : 'Reconnecting'}
+      </span>
       <span className="sr-only">{label}</span>
     </span>
   );
@@ -133,7 +135,9 @@ export function AppShell() {
             <div className="hidden items-center gap-2 border-l border-border pl-3 text-sm sm:flex">
               <Icon name="user" className="h-4 w-4 text-muted" />
               <span className="max-w-32 truncate font-medium">{session?.user.username}</span>
-              <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">{session?.user.role}</span>
+              <span className="rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">
+                {session?.user.role}
+              </span>
             </div>
             <IconButton icon="logout" label="Sign out" onClick={() => void logout()} />
           </div>
@@ -142,7 +146,9 @@ export function AppShell() {
         {mode?.readOnly ? (
           <div className="border-b border-border bg-warning/10 px-4 py-2 text-sm">
             <span className="font-semibold text-warning">Read-only mode.</span>{' '}
-            <span className="text-muted">{mode.readOnlyReason ?? 'Changes are disabled on this instance.'}</span>
+            <span className="text-muted">
+              {mode.readOnlyReason ?? 'Changes are disabled on this instance.'}
+            </span>
           </div>
         ) : null}
 
@@ -163,8 +169,8 @@ export function ScopeNotice() {
   if (!mode || mode.managedScope.length === 0) return null;
   return (
     <Notice tone="info" className="mb-4" title="Managed scope is active">
-      Only resources matching <code className="font-mono">{mode.managedScope.join(', ')}</code> can be changed. Everything
-      else is read-only.
+      Only resources matching <code className="font-mono">{mode.managedScope.join(', ')}</code> can be
+      changed. Everything else is read-only.
     </Notice>
   );
 }

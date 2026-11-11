@@ -23,7 +23,19 @@ function MiniList({ children }: { children: React.ReactNode }) {
   return <ul className="divide-y divide-border/60">{children}</ul>;
 }
 
-function Section({ title, description, to, linkLabel, children }: { title: string; description?: string; to?: string; linkLabel?: string; children: React.ReactNode }) {
+function Section({
+  title,
+  description,
+  to,
+  linkLabel,
+  children,
+}: {
+  title: string;
+  description?: string;
+  to?: string;
+  linkLabel?: string;
+  children: React.ReactNode;
+}) {
   return (
     <Card>
       <CardHeader
@@ -57,7 +69,9 @@ export default function Dashboard() {
 
   const counts = useMemo(() => countContainers(containers.data ?? []), [containers.data]);
   const attention = useMemo(() => needsAttention(containers.data ?? []), [containers.data]);
-  const pending = (updates.data?.images ?? []).filter((i) => i.state === 'update_available' || i.state === 'update_staged');
+  const pending = (updates.data?.images ?? []).filter(
+    (i) => i.state === 'update_available' || i.state === 'update_staged',
+  );
 
   const upcoming = useMemo(
     () =>
@@ -82,11 +96,38 @@ export default function Dashboard() {
       <ScopeNotice />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
-        <StatCard label="Running" value={containers.isLoading ? '…' : counts.running} sub={`of ${counts.total} containers`} icon="play" tone="healthy" />
-        <StatCard label="Stopped" value={containers.isLoading ? '…' : counts.stopped} icon="stop" tone="inactive" />
-        <StatCard label="Restarting" value={containers.isLoading ? '…' : counts.restarting} icon="refresh" tone={counts.restarting ? 'critical' : 'inactive'} />
-        <StatCard label="Unhealthy" value={containers.isLoading ? '…' : counts.unhealthy} icon="alert" tone={counts.unhealthy ? 'critical' : 'inactive'} />
-        <StatCard label="Projects" value={projects.isLoading ? '…' : (projects.data?.length ?? 0)} sub="Compose" icon="layers" tone="info" />
+        <StatCard
+          label="Running"
+          value={containers.isLoading ? '…' : counts.running}
+          sub={`of ${counts.total} containers`}
+          icon="play"
+          tone="healthy"
+        />
+        <StatCard
+          label="Stopped"
+          value={containers.isLoading ? '…' : counts.stopped}
+          icon="stop"
+          tone="inactive"
+        />
+        <StatCard
+          label="Restarting"
+          value={containers.isLoading ? '…' : counts.restarting}
+          icon="refresh"
+          tone={counts.restarting ? 'critical' : 'inactive'}
+        />
+        <StatCard
+          label="Unhealthy"
+          value={containers.isLoading ? '…' : counts.unhealthy}
+          icon="alert"
+          tone={counts.unhealthy ? 'critical' : 'inactive'}
+        />
+        <StatCard
+          label="Projects"
+          value={projects.isLoading ? '…' : (projects.data?.length ?? 0)}
+          sub="Compose"
+          icon="layers"
+          tone="info"
+        />
         <StatCard
           label="Images"
           value={images.isLoading ? '…' : (images.data?.length ?? 0)}
@@ -105,7 +146,14 @@ export default function Dashboard() {
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card>
-          <CardHeader title="Host" description={info.data ? `${info.data.OperatingSystem ?? ''} · Docker ${info.data.ServerVersion ?? ''}` : undefined} />
+          <CardHeader
+            title="Host"
+            description={
+              info.data
+                ? `${info.data.OperatingSystem ?? ''} · Docker ${info.data.ServerVersion ?? ''}`
+                : undefined
+            }
+          />
           <CardBody className="space-y-4">
             {host.isLoading ? (
               <LoadingState rows={3} />
@@ -114,23 +162,50 @@ export default function Dashboard() {
             ) : h ? (
               <>
                 <div>
-                  <div className="mb-1 flex justify-between text-xs"><span className="text-muted">CPU</span><span className="tabular-nums">{h.cpuPercent === null ? '–' : percent(h.cpuPercent)}</span></div>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="text-muted">CPU</span>
+                    <span className="tabular-nums">
+                      {h.cpuPercent === null ? '–' : percent(h.cpuPercent)}
+                    </span>
+                  </div>
                   <ProgressBar value={h.cpuPercent ?? 0} label="Host CPU" />
                 </div>
                 <div>
-                  <div className="mb-1 flex justify-between text-xs"><span className="text-muted">Memory</span><span className="tabular-nums">{bytes(memUsed)} / {bytes(h.memTotal)}</span></div>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="text-muted">Memory</span>
+                    <span className="tabular-nums">
+                      {bytes(memUsed)} / {bytes(h.memTotal)}
+                    </span>
+                  </div>
                   <ProgressBar value={memPct} label="Host memory" />
                 </div>
                 {root ? (
                   <div>
-                    <div className="mb-1 flex justify-between text-xs"><span className="text-muted">Docker disk</span><span className="tabular-nums">{bytes(root.total - root.free)} / {bytes(root.total)}</span></div>
+                    <div className="mb-1 flex justify-between text-xs">
+                      <span className="text-muted">Docker disk</span>
+                      <span className="tabular-nums">
+                        {bytes(root.total - root.free)} / {bytes(root.total)}
+                      </span>
+                    </div>
                     <ProgressBar value={diskPct} label="Docker disk" />
                   </div>
                 ) : null}
                 <div className="grid grid-cols-2 gap-2 text-xs text-muted">
-                  <div>Load <span className="tabular-nums text-fg">{h.load.map((l) => l.toFixed(2)).join(' · ')}</span></div>
-                  <div>Uptime <span className="text-fg">{duration(h.uptimeSeconds)}</span></div>
-                  {df.data?.usage ? <div className="col-span-2">Images use <span className="text-fg">{bytes(df.data.usage.images.totalSize)}</span> in total</div> : null}
+                  <div>
+                    Load{' '}
+                    <span className="tabular-nums text-fg">
+                      {h.load.map((l) => l.toFixed(2)).join(' · ')}
+                    </span>
+                  </div>
+                  <div>
+                    Uptime <span className="text-fg">{duration(h.uptimeSeconds)}</span>
+                  </div>
+                  {df.data?.usage ? (
+                    <div className="col-span-2">
+                      Images use <span className="text-fg">{bytes(df.data.usage.images.totalSize)}</span> in
+                      total
+                    </div>
+                  ) : null}
                 </div>
               </>
             ) : null}
@@ -139,14 +214,27 @@ export default function Dashboard() {
 
         <div className="grid gap-4 lg:col-span-2 lg:grid-cols-2">
           <Card className="lg:col-span-2">
-            <CardHeader title="Containers: CPU and memory" description="Sum over all containers, last 60 minutes" />
+            <CardHeader
+              title="Containers: CPU and memory"
+              description="Sum over all containers, last 60 minutes"
+            />
             <CardBody>
               {points.length < 2 ? (
                 <ChartEmpty />
               ) : (
                 <div className="grid gap-4 md:grid-cols-2">
-                  <TimeChart data={points} series={[{ key: 'cpu', label: 'CPU', color: 'accent' }]} format={(v) => `${v.toFixed(0)} %`} ariaLabel="Total container CPU usage over the last hour" />
-                  <TimeChart data={points} series={[{ key: 'mem', label: 'Memory', color: 'info' }]} format={(v) => bytes(v, 0)} ariaLabel="Total container memory usage over the last hour" />
+                  <TimeChart
+                    data={points}
+                    series={[{ key: 'cpu', label: 'CPU', color: 'accent' }]}
+                    format={(v) => `${v.toFixed(0)} %`}
+                    ariaLabel="Total container CPU usage over the last hour"
+                  />
+                  <TimeChart
+                    data={points}
+                    series={[{ key: 'mem', label: 'Memory', color: 'info' }]}
+                    format={(v) => bytes(v, 0)}
+                    ariaLabel="Total container memory usage over the last hour"
+                  />
                 </div>
               )}
             </CardBody>
@@ -174,17 +262,28 @@ export default function Dashboard() {
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <Section title="Needs attention" description="Restart loops, failing health checks, crashed containers" to="/containers">
+        <Section
+          title="Needs attention"
+          description="Restart loops, failing health checks, crashed containers"
+          to="/containers"
+        >
           {containers.isLoading ? (
             <LoadingState rows={2} />
           ) : attention.length === 0 ? (
-            <EmptyState icon="check" title="All clear">No container is restarting, unhealthy or crashed.</EmptyState>
+            <EmptyState icon="check" title="All clear">
+              No container is restarting, unhealthy or crashed.
+            </EmptyState>
           ) : (
             <MiniList>
               {attention.slice(0, 6).map((a) => (
                 <li key={a.container.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
-                    <Link to={`/containers/${encodeURIComponent(a.container.name)}`} className="font-medium hover:text-accent">{a.container.name}</Link>
+                    <Link
+                      to={`/containers/${encodeURIComponent(a.container.name)}`}
+                      className="font-medium hover:text-accent"
+                    >
+                      {a.container.name}
+                    </Link>
                     <div className="text-xs text-muted">{a.detail}</div>
                   </div>
                   <ContainerStatus c={a.container} />
@@ -198,14 +297,20 @@ export default function Dashboard() {
           {updates.isLoading ? (
             <LoadingState rows={2} />
           ) : pending.length === 0 ? (
-            <EmptyState icon="check" title="Everything is up to date">No newer images were found at the last check{updates.data?.images.length ? ` (${updates.data.images.length} checked)` : ''}.</EmptyState>
+            <EmptyState icon="check" title="Everything is up to date">
+              No newer images were found at the last check
+              {updates.data?.images.length ? ` (${updates.data.images.length} checked)` : ''}.
+            </EmptyState>
           ) : (
             <MiniList>
               {pending.slice(0, 6).map((u) => (
                 <li key={u.ref} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
                     <div className="truncate font-mono text-sm">{u.ref}</div>
-                    <div className="text-xs text-muted">Used by {u.usedBy.length ? u.usedBy.map((x) => x.containerName).join(', ') : 'no container'}</div>
+                    <div className="text-xs text-muted">
+                      Used by{' '}
+                      {u.usedBy.length ? u.usedBy.map((x) => x.containerName).join(', ') : 'no container'}
+                    </div>
                   </div>
                   <UpdateBadge state={u.state} />
                 </li>
@@ -214,18 +319,27 @@ export default function Dashboard() {
           )}
         </Section>
 
-        <Section title="Next maintenance" description="Upcoming scheduled tasks" to="/maintenance" linkLabel="Maintenance">
+        <Section
+          title="Next maintenance"
+          description="Upcoming scheduled tasks"
+          to="/maintenance"
+          linkLabel="Maintenance"
+        >
           {schedules.isLoading ? (
             <LoadingState rows={2} />
           ) : upcoming.length === 0 ? (
-            <EmptyState icon="calendar" title="Nothing scheduled">Create a schedule on the Maintenance page to check or update images automatically.</EmptyState>
+            <EmptyState icon="calendar" title="Nothing scheduled">
+              Create a schedule on the Maintenance page to check or update images automatically.
+            </EmptyState>
           ) : (
             <MiniList>
               {upcoming.map(({ s, at }) => (
                 <li key={s.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
                     <div className="truncate font-medium">{s.name}</div>
-                    <div className="text-xs text-muted">{s.jobType.replace('_', ' ')} · {s.mode === 'auto' ? 'automatic' : 'needs approval'}</div>
+                    <div className="text-xs text-muted">
+                      {s.jobType.replace('_', ' ')} · {s.mode === 'auto' ? 'automatic' : 'needs approval'}
+                    </div>
                   </div>
                   <div className="shrink-0 text-right text-xs">
                     <div className="font-medium">{relativeTime(at)}</div>
@@ -241,14 +355,20 @@ export default function Dashboard() {
           {runs.isLoading ? (
             <LoadingState rows={2} />
           ) : (runs.data?.runs.length ?? 0) === 0 ? (
-            <EmptyState icon="wrench" title="No runs yet">Plans and update runs show up here.</EmptyState>
+            <EmptyState icon="wrench" title="No runs yet">
+              Plans and update runs show up here.
+            </EmptyState>
           ) : (
             <MiniList>
               {runs.data?.runs.slice(0, 6).map((r) => (
                 <li key={r.id} className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="min-w-0">
-                    <Link to={`/maintenance/runs/${r.id}`} className="font-medium hover:text-accent">{r.target}</Link>
-                    <div className="text-xs text-muted">{r.kind.replace('_', ' ')} · {relativeTime(r.createdAt)} · {r.requestedBy}</div>
+                    <Link to={`/maintenance/runs/${r.id}`} className="font-medium hover:text-accent">
+                      {r.target}
+                    </Link>
+                    <div className="text-xs text-muted">
+                      {r.kind.replace('_', ' ')} · {relativeTime(r.createdAt)} · {r.requestedBy}
+                    </div>
                   </div>
                   <RunBadge status={r.status} />
                 </li>
@@ -257,18 +377,27 @@ export default function Dashboard() {
           )}
         </Section>
 
-        <Section title="Recent events" description="Docker events (container lifecycle, health)" to="/logs" linkLabel="All events">
+        <Section
+          title="Recent events"
+          description="Docker events (container lifecycle, health)"
+          to="/logs"
+          linkLabel="All events"
+        >
           {events.isLoading ? (
             <LoadingState rows={2} />
           ) : (events.data?.events.length ?? 0) === 0 ? (
-            <EmptyState icon="scroll" title="No events yet">Container starts, stops and health changes appear here.</EmptyState>
+            <EmptyState icon="scroll" title="No events yet">
+              Container starts, stops and health changes appear here.
+            </EmptyState>
           ) : (
             <MiniList>
               {events.data?.events.map((e) => (
                 <li key={e.id} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
                   <div className="min-w-0 truncate">
                     <span className="font-medium">{e.name ?? e.actorId.slice(0, 12)}</span>{' '}
-                    <span className="text-muted">{e.type} {e.action}</span>
+                    <span className="text-muted">
+                      {e.type} {e.action}
+                    </span>
                   </div>
                   <span className="shrink-0 text-xs text-muted">{relativeTime(e.time)}</span>
                 </li>
@@ -280,4 +409,3 @@ export default function Dashboard() {
     </>
   );
 }
-

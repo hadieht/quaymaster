@@ -36,7 +36,12 @@ export function Badge({
 
 export function Tag({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <span className={cn('inline-flex items-center rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-muted', className)}>
+    <span
+      className={cn(
+        'inline-flex items-center rounded bg-surface-2 px-1.5 py-0.5 font-mono text-xs text-muted',
+        className,
+      )}
+    >
       {children}
     </span>
   );

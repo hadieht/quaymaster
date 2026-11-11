@@ -41,7 +41,13 @@ export function LoginPage() {
     <Frame title="Sign in to Quaymaster" subtitle="Docker monitoring and maintenance">
       <form onSubmit={(e) => void submit(e)} className="space-y-4" aria-label="Sign in">
         <Field label="Username">
-          <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+            autoFocus
+            required
+          />
         </Field>
         <Field label="Password">
           <Input
@@ -53,7 +59,13 @@ export function LoginPage() {
           />
         </Field>
         {error ? <Notice tone="critical">{error}</Notice> : null}
-        <Button type="submit" variant="primary" className="w-full" loading={busy} disabled={!username || !password}>
+        <Button
+          type="submit"
+          variant="primary"
+          className="w-full"
+          loading={busy}
+          disabled={!username || !password}
+        >
           Sign in
         </Button>
       </form>
@@ -88,20 +100,47 @@ export function SetupPage() {
     <Frame title="Welcome to Quaymaster" subtitle="Create the first administrator">
       <form onSubmit={(e) => void submit(e)} className="space-y-4" aria-label="First-run setup">
         <Notice tone="info">
-          The one-time setup token is printed in the server log on first start and saved as <code>setup-token</code> in the
-          data directory.
+          The one-time setup token is printed in the server log on first start and saved as{' '}
+          <code>setup-token</code> in the data directory.
         </Notice>
         <Field label="Setup token">
-          <Input value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" spellCheck={false} required />
+          <Input
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            required
+          />
         </Field>
         <Field label="Administrator username">
-          <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" required />
+          <Input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+            required
+          />
         </Field>
-        <Field label="Password" hint="At least 12 characters." error={tooShort ? 'Use at least 12 characters.' : null}>
-          <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required />
+        <Field
+          label="Password"
+          hint="At least 12 characters."
+          error={tooShort ? 'Use at least 12 characters.' : null}
+        >
+          <Input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
+            required
+          />
         </Field>
         <Field label="Repeat password" error={mismatch ? 'The passwords do not match.' : null}>
-          <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
+          <Input
+            type="password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            autoComplete="new-password"
+            required
+          />
         </Field>
         {error ? <Notice tone="critical">{error}</Notice> : null}
         <Button

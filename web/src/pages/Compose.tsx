@@ -6,7 +6,17 @@ import { q } from '@/api/hooks';
 import type { ComposeProjectSummary, CapabilityLevel } from '@/api/types';
 import { CapabilityBadge, ProjectStatus } from '@/components/domain/badges';
 import { ScopeNotice } from '@/components/layout/AppShell';
-import { Button, Card, CardBody, DataTable, ErrorState, LoadingState, PageHeader, SearchInput, type Column } from '@/components/ui';
+import {
+  Button,
+  Card,
+  CardBody,
+  DataTable,
+  ErrorState,
+  LoadingState,
+  PageHeader,
+  SearchInput,
+  type Column,
+} from '@/components/ui';
 import { CAPABILITY_TEXT } from '@/lib/status';
 
 export default function ComposePage() {
@@ -15,13 +25,31 @@ export default function ComposePage() {
   const projects = useQuery(q.projects());
   const rows = useMemo(() => {
     const n = search.trim().toLowerCase();
-    return (projects.data ?? []).filter((p) => !n || p.name.toLowerCase().includes(n) || p.services.some((s) => s.name.toLowerCase().includes(n)));
+    return (projects.data ?? []).filter(
+      (p) =>
+        !n || p.name.toLowerCase().includes(n) || p.services.some((s) => s.name.toLowerCase().includes(n)),
+    );
   }, [projects.data, search]);
 
   const columns: Column<ComposeProjectSummary>[] = [
-    { key: 'name', header: 'Project', sort: (a, b) => a.name.localeCompare(b.name), cell: (p) => <span className="font-medium">{p.name}</span> },
-    { key: 'status', header: 'Status', sort: (a, b) => a.status.localeCompare(b.status), cell: (p) => <ProjectStatus status={p.status} /> },
-    { key: 'level', header: 'Control', sort: (a, b) => a.level.localeCompare(b.level), cell: (p) => <CapabilityBadge level={p.level} /> },
+    {
+      key: 'name',
+      header: 'Project',
+      sort: (a, b) => a.name.localeCompare(b.name),
+      cell: (p) => <span className="font-medium">{p.name}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sort: (a, b) => a.status.localeCompare(b.status),
+      cell: (p) => <ProjectStatus status={p.status} />,
+    },
+    {
+      key: 'level',
+      header: 'Control',
+      sort: (a, b) => a.level.localeCompare(b.level),
+      cell: (p) => <CapabilityBadge level={p.level} />,
+    },
     {
       key: 'services',
       header: 'Services',
@@ -41,7 +69,10 @@ export default function ComposePage() {
       header: 'Images',
       hideOnSmall: true,
       cell: (p) => (
-        <span className="block max-w-72 truncate font-mono text-xs text-muted" title={p.services.map((s) => s.image ?? '?').join(', ')}>
+        <span
+          className="block max-w-72 truncate font-mono text-xs text-muted"
+          title={p.services.map((s) => s.image ?? '?').join(', ')}
+        >
           {[...new Set(p.services.map((s) => s.image).filter(Boolean))].join(', ') || '–'}
         </span>
       ),
@@ -54,7 +85,11 @@ export default function ComposePage() {
       <PageHeader
         title="Compose Projects"
         description="Projects found from running containers and from the configured stack folders."
-        actions={<Button icon="refresh" onClick={() => void projects.refetch()}>Refresh</Button>}
+        actions={
+          <Button icon="refresh" onClick={() => void projects.refetch()}>
+            Refresh
+          </Button>
+        }
       />
       <ScopeNotice />
       <Card className="mb-4">
@@ -69,12 +104,21 @@ export default function ComposePage() {
       </Card>
       <Card>
         <div className="border-b border-border p-3">
-          <SearchInput value={search} onChange={setSearch} placeholder="Search project or service…" label="Search projects" />
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search project or service…"
+            label="Search projects"
+          />
         </div>
         {projects.isLoading ? (
           <LoadingState rows={4} />
         ) : projects.error ? (
-          <ErrorState error={projects.error} onRetry={() => void projects.refetch()} title="Could not load projects" />
+          <ErrorState
+            error={projects.error}
+            onRetry={() => void projects.refetch()}
+            title="Could not load projects"
+          />
         ) : (
           <DataTable
             caption="Compose projects"
@@ -83,7 +127,11 @@ export default function ComposePage() {
             columns={columns}
             initialSort={{ key: 'name', dir: 'asc' }}
             onRowClick={(p) => navigate(`/compose/${encodeURIComponent(p.name)}`)}
-            empty={{ icon: 'layers', title: 'No Compose projects found', text: 'Start a project with docker compose, or add its folder to the stack paths.' }}
+            empty={{
+              icon: 'layers',
+              title: 'No Compose projects found',
+              text: 'Start a project with docker compose, or add its folder to the stack paths.',
+            }}
           />
         )}
       </Card>

@@ -52,7 +52,11 @@ export function DataTable<T>({
   }, [rows, columns, sort]);
 
   if (rows.length === 0) {
-    return <EmptyState icon={empty?.icon} title={empty?.title ?? 'Nothing to show'} action={empty?.action}>{empty?.text}</EmptyState>;
+    return (
+      <EmptyState icon={empty?.icon} title={empty?.title ?? 'Nothing to show'} action={empty?.action}>
+        {empty?.text}
+      </EmptyState>
+    );
   }
   const visible = sorted.slice(0, limit);
   return (
@@ -79,12 +83,18 @@ export function DataTable<T>({
                       <button
                         type="button"
                         onClick={() =>
-                          setSort(active && sort?.dir === 'asc' ? { key: c.key, dir: 'desc' } : { key: c.key, dir: 'asc' })
+                          setSort(
+                            active && sort?.dir === 'asc'
+                              ? { key: c.key, dir: 'desc' }
+                              : { key: c.key, dir: 'asc' },
+                          )
                         }
                         className="inline-flex items-center gap-1 uppercase tracking-wide hover:text-fg"
                       >
                         {c.header}
-                        {active ? <Icon name={sort?.dir === 'asc' ? 'arrowUp' : 'arrowDown'} className="h-3 w-3" /> : null}
+                        {active ? (
+                          <Icon name={sort?.dir === 'asc' ? 'arrowUp' : 'arrowDown'} className="h-3 w-3" />
+                        ) : null}
                       </button>
                     ) : (
                       c.header
@@ -125,7 +135,11 @@ export function DataTable<T>({
       </div>
       {sorted.length > limit ? (
         <div className="border-t border-border px-3 py-2 text-center">
-          <button type="button" onClick={() => setLimit(limit + pageSize)} className="text-sm font-medium text-accent hover:underline">
+          <button
+            type="button"
+            onClick={() => setLimit(limit + pageSize)}
+            className="text-sm font-medium text-accent hover:underline"
+          >
             Show more ({sorted.length - limit} remaining)
           </button>
         </div>
@@ -148,7 +162,10 @@ export function SearchInput({
 }) {
   return (
     <div className="relative w-full sm:w-64">
-      <Icon name="search" className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+      <Icon
+        name="search"
+        className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+      />
       <input
         type="search"
         aria-label={label}

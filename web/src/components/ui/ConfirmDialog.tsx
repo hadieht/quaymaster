@@ -79,12 +79,19 @@ export function ConfirmDialog({
       }
     >
       <div className="space-y-3">
-        <div className="break-all rounded-md border border-border bg-surface-2 px-3 py-2 font-mono text-sm">{target}</div>
+        <div className="break-all rounded-md border border-border bg-surface-2 px-3 py-2 font-mono text-sm">
+          {target}
+        </div>
         <div className="text-sm">{impact}</div>
         {children}
         {requireText ? (
           <Field label={`Type “${requireText}” to confirm`}>
-            <Input value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} />
+            <Input
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
           </Field>
         ) : null}
         {error ? (

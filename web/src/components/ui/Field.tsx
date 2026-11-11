@@ -70,12 +70,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
   );
 });
 
-export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea(
-  { className, ...rest },
-  ref,
-) {
-  return <textarea ref={ref} {...rest} className={cn(CONTROL, 'min-h-20 py-2', className)} />;
-});
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<HTMLTextAreaElement>>(
+  function Textarea({ className, ...rest }, ref) {
+    return <textarea ref={ref} {...rest} className={cn(CONTROL, 'min-h-20 py-2', className)} />;
+  },
+);
 
 export function Switch({
   checked,

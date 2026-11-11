@@ -7,7 +7,10 @@ import { useGate } from '@/state/auth';
 
 type Pending = Extract<ContainerAction, 'stop' | 'restart' | 'recreate' | 'remove'> | null;
 
-const COPY: Record<NonNullable<Pending>, { title: string; confirm: string; variant: 'danger' | 'primary' | 'secondary' }> = {
+const COPY: Record<
+  NonNullable<Pending>,
+  { title: string; confirm: string; variant: 'danger' | 'primary' | 'secondary' }
+> = {
   stop: { title: 'Stop container', confirm: 'Stop container', variant: 'danger' },
   restart: { title: 'Restart container', confirm: 'Restart container', variant: 'primary' },
   recreate: { title: 'Recreate container', confirm: 'Recreate container', variant: 'danger' },
@@ -16,7 +19,11 @@ const COPY: Record<NonNullable<Pending>, { title: string; confirm: string; varia
 
 export function useContainerAction() {
   const invalidate = useInvalidateDocker();
-  return async (c: Pick<ContainerSummary, 'id' | 'name'>, action: ContainerAction, body: ActionRequest = {}) => {
+  return async (
+    c: Pick<ContainerSummary, 'id' | 'name'>,
+    action: ContainerAction,
+    body: ActionRequest = {},
+  ) => {
     const r = await api.post<unknown>(`/containers/${c.id}/actions/${action}`, body);
     invalidate();
     return r;
@@ -47,7 +54,9 @@ export function ContainerActions({ c, size = 'sm' }: { c: ContainerSummary; size
       : c.capability && c.capability !== 'full'
         ? 'Limited control: the Compose files are not readable or trusted, so this container cannot be recreated.'
         : null);
-  const removeReason = base ?? (running ? 'Stop the container first: Quaymaster never force-removes a running container.' : null);
+  const removeReason =
+    base ??
+    (running ? 'Stop the container first: Quaymaster never force-removes a running container.' : null);
 
   const quick = async (action: 'start') => {
     try {
@@ -73,9 +82,13 @@ export function ContainerActions({ c, size = 'sm' }: { c: ContainerSummary; size
     if (confirmNs) body.confirmNamespaceProvider = true;
     try {
       await act(c, pending, body);
-      toast.success(`${COPY[pending].title.split(' ')[0]}: ${c.name}`, pending === 'recreate' ? 'The container was recreated.' : undefined);
+      toast.success(
+        `${COPY[pending].title.split(' ')[0]}: ${c.name}`,
+        pending === 'recreate' ? 'The container was recreated.' : undefined,
+      );
     } catch (e) {
-      const field = (e instanceof ApiError ? (e.details as { field?: string } | undefined)?.field : undefined) ?? '';
+      const field =
+        (e instanceof ApiError ? (e.details as { field?: string } | undefined)?.field : undefined) ?? '';
       if (e instanceof ApiError && (e.code === 'blocked_drift' || field === 'confirmNamespaceProvider')) {
         setNeeds({ drift: e.code === 'blocked_drift', ns: e.code !== 'blocked_drift' });
       }
@@ -88,27 +101,30 @@ export function ContainerActions({ c, size = 'sm' }: { c: ContainerSummary; size
       case 'stop':
         return (
           <>
-            <b>{c.name}</b> will be stopped (SIGTERM, then SIGKILL after the grace period). Services that depend on it will lose
-            it until it is started again.
+            <b>{c.name}</b> will be stopped (SIGTERM, then SIGKILL after the grace period). Services that
+            depend on it will lose it until it is started again.
           </>
         );
       case 'restart':
         return (
           <>
-            <b>{c.name}</b> is stopped and started again. Expect a short interruption; open connections are dropped.
+            <b>{c.name}</b> is stopped and started again. Expect a short interruption; open connections are
+            dropped.
           </>
         );
       case 'recreate':
         return (
           <>
-            Compose removes <b>{c.name}</b> and creates a new container from the current Compose configuration. The container ID
-            changes and anything stored only inside the container (not in a volume) is lost. Volumes are kept.
+            Compose removes <b>{c.name}</b> and creates a new container from the current Compose
+            configuration. The container ID changes and anything stored only inside the container (not in a
+            volume) is lost. Volumes are kept.
           </>
         );
       case 'remove':
         return (
           <>
-            The stopped container <b>{c.name}</b> is deleted. Volumes are <b>not</b> removed. This cannot be undone.
+            The stopped container <b>{c.name}</b> is deleted. Volumes are <b>not</b> removed. This cannot be
+            undone.
           </>
         );
     }
@@ -129,10 +145,21 @@ export function ContainerActions({ c, size = 'sm' }: { c: ContainerSummary; size
         <Button size={size} icon="refresh" disabledReason={base} onClick={() => setPending('restart')}>
           Restart
         </Button>
-        <Button size={size} icon="undo" disabledReason={recreateReason} onClick={() => setPending('recreate')}>
+        <Button
+          size={size}
+          icon="undo"
+          disabledReason={recreateReason}
+          onClick={() => setPending('recreate')}
+        >
           Recreate
         </Button>
-        <Button size={size} icon="trash" variant="danger" disabledReason={removeReason} onClick={() => setPending('remove')}>
+        <Button
+          size={size}
+          icon="trash"
+          variant="danger"
+          disabledReason={removeReason}
+          onClick={() => setPending('remove')}
+        >
           Remove
         </Button>
       </div>
@@ -151,10 +178,14 @@ export function ContainerActions({ c, size = 'sm' }: { c: ContainerSummary; size
           {needs.drift ? (
             <Notice tone="warning" title="Configuration drift">
               <div className="mb-2">
-                The running container no longer matches its Compose file. Recreating applies those changes, not just an image
-                update. Tick the box below to apply them anyway, then confirm again.
+                The running container no longer matches its Compose file. Recreating applies those changes,
+                not just an image update. Tick the box below to apply them anyway, then confirm again.
               </div>
-              <Checkbox checked={applyDrift} onChange={setApplyDrift} label="Apply the drifted configuration" />
+              <Checkbox
+                checked={applyDrift}
+                onChange={setApplyDrift}
+                label="Apply the drifted configuration"
+              />
             </Notice>
           ) : null}
           {needs.ns ? (
@@ -162,7 +193,11 @@ export function ContainerActions({ c, size = 'sm' }: { c: ContainerSummary; size
               <div className="mb-2">
                 Other services use this container’s network or volumes; recreating it recreates them too.
               </div>
-              <Checkbox checked={confirmNs} onChange={setConfirmNs} label="I understand, recreate the dependents too" />
+              <Checkbox
+                checked={confirmNs}
+                onChange={setConfirmNs}
+                label="I understand, recreate the dependents too"
+              />
             </Notice>
           ) : null}
         </ConfirmDialog>

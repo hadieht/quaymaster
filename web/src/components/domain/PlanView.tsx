@@ -19,10 +19,15 @@ export function PlanView({ plan }: { plan: Plan }) {
       ))}
 
       <Card>
-        <CardHeader title="Order of operations" description={`Target: ${plan.target}. Services are updated in this order; dependencies first.`} />
+        <CardHeader
+          title="Order of operations"
+          description={`Target: ${plan.target}. Services are updated in this order; dependencies first.`}
+        />
         <CardBody>
           {plan.order.length === 0 ? (
-            <p className="text-sm text-muted">Nothing to update: no service has a newer staged or available image.</p>
+            <p className="text-sm text-muted">
+              Nothing to update: no service has a newer staged or available image.
+            </p>
           ) : (
             <ol className="space-y-3">
               {plan.order.map((name, i) => {
@@ -31,9 +36,13 @@ export function PlanView({ plan }: { plan: Plan }) {
                 return (
                   <li key={name} className="rounded-lg border border-border p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-2 text-xs font-semibold">{i + 1}</span>
+                      <span className="flex h-6 w-6 items-center justify-center rounded-full bg-surface-2 text-xs font-semibold">
+                        {i + 1}
+                      </span>
                       <span className="font-medium">{name}</span>
-                      <Badge tone={s.role === 'update' ? 'info' : 'inactive'}>{s.role === 'update' ? 'update' : `recreated with ${s.dependentOf ?? 'dependency'}`}</Badge>
+                      <Badge tone={s.role === 'update' ? 'info' : 'inactive'}>
+                        {s.role === 'update' ? 'update' : `recreated with ${s.dependentOf ?? 'dependency'}`}
+                      </Badge>
                       {s.critical ? <Badge tone="warning">critical</Badge> : null}
                       {s.requireApproval ? <Badge tone="warning">needs approval</Badge> : null}
                       {s.quarantined ? <Badge tone="critical">quarantined</Badge> : null}
@@ -57,7 +66,12 @@ export function PlanView({ plan }: { plan: Plan }) {
                       <div>
                         <dt className="inline text-muted">Health check: </dt>
                         <dd className="inline">
-                          {s.health.kind === 'healthcheck' ? 'container healthcheck' : s.health.kind === 'oneshot' ? 'one-shot (exit code)' : `stable for ${s.health.stabilizationSeconds}s`}, up to {s.health.timeoutSeconds}s
+                          {s.health.kind === 'healthcheck'
+                            ? 'container healthcheck'
+                            : s.health.kind === 'oneshot'
+                              ? 'one-shot (exit code)'
+                              : `stable for ${s.health.stabilizationSeconds}s`}
+                          , up to {s.health.timeoutSeconds}s
                           {s.health.probe ? `, probe ${s.health.probe.url}` : ''}
                         </dd>
                       </div>
@@ -84,7 +98,9 @@ export function PlanView({ plan }: { plan: Plan }) {
                       </Notice>
                     ) : null}
                     {!s.unattended.eligible ? (
-                      <p className="mt-2 text-xs text-muted">Not eligible for unattended runs: {s.unattended.blockers.join('; ')}</p>
+                      <p className="mt-2 text-xs text-muted">
+                        Not eligible for unattended runs: {s.unattended.blockers.join('; ')}
+                      </p>
                     ) : null}
                   </li>
                 );
@@ -111,16 +127,23 @@ export function PlanView({ plan }: { plan: Plan }) {
 
       {plan.impact.dependents.length || plan.impact.sharedTag.length ? (
         <Card>
-          <CardHeader title="Affected dependents" description="Services that are restarted or share an image with the update." />
+          <CardHeader
+            title="Affected dependents"
+            description="Services that are restarted or share an image with the update."
+          />
           <CardBody className="space-y-2 text-sm">
             {plan.impact.dependents.map((d) => (
               <div key={d.service + d.via}>
-                <b>{d.service}</b> <span className="text-muted">({d.kind} via {d.via})</span>
+                <b>{d.service}</b>{' '}
+                <span className="text-muted">
+                  ({d.kind} via {d.via})
+                </span>
               </div>
             ))}
             {plan.impact.sharedTag.map((t) => (
               <div key={t.containerName}>
-                <b>{t.containerName}</b> <Tag>{t.inRun ? 'in this run' : 'not in this run'}</Tag> <span className="text-muted">{t.note}</span>
+                <b>{t.containerName}</b> <Tag>{t.inRun ? 'in this run' : 'not in this run'}</Tag>{' '}
+                <span className="text-muted">{t.note}</span>
               </div>
             ))}
           </CardBody>
@@ -129,14 +152,19 @@ export function PlanView({ plan }: { plan: Plan }) {
 
       {plan.drift.length ? (
         <Notice tone="warning" title="Configuration drift">
-          {plan.drift.map((d) => d.service).join(', ')}: the running containers differ from the Compose files. Updating applies those changes too.
+          {plan.drift.map((d) => d.service).join(', ')}: the running containers differ from the Compose files.
+          Updating applies those changes too.
         </Notice>
       ) : null}
 
       <Card>
         <CardHeader
           title="Safety checks"
-          actions={<Badge tone={plan.preflight.ok && plan.validation.valid ? 'healthy' : 'critical'}>{plan.preflight.ok && plan.validation.valid ? 'all passed' : 'attention needed'}</Badge>}
+          actions={
+            <Badge tone={plan.preflight.ok && plan.validation.valid ? 'healthy' : 'critical'}>
+              {plan.preflight.ok && plan.validation.valid ? 'all passed' : 'attention needed'}
+            </Badge>
+          }
         />
         <CardBody>
           <ul className="space-y-1.5 text-sm">
@@ -155,7 +183,12 @@ export function PlanView({ plan }: { plan: Plan }) {
             ))}
           </ul>
           <p className="mt-3 text-xs text-muted">
-            Disk: {plan.disk.requiredBytes == null ? 'needed space unknown' : `${bytes(plan.disk.requiredBytes)} needed`}, {plan.disk.freeBytes == null ? 'free space unknown' : `${bytes(plan.disk.freeBytes)} free`} ({plan.disk.ok ? 'enough' : 'not enough'}).
+            Disk:{' '}
+            {plan.disk.requiredBytes == null
+              ? 'needed space unknown'
+              : `${bytes(plan.disk.requiredBytes)} needed`}
+            , {plan.disk.freeBytes == null ? 'free space unknown' : `${bytes(plan.disk.freeBytes)} free`} (
+            {plan.disk.ok ? 'enough' : 'not enough'}).
           </p>
         </CardBody>
       </Card>

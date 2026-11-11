@@ -59,7 +59,9 @@ export function Modal({
       <div
         className={cn(
           'flex max-h-full flex-col border border-border bg-surface text-fg shadow-xl',
-          variant === 'drawer' ? 'ml-auto h-full w-full max-w-xl rounded-l-xl' : cn('w-full rounded-xl', widths),
+          variant === 'drawer'
+            ? 'ml-auto h-full w-full max-w-xl rounded-l-xl'
+            : cn('w-full rounded-xl', widths),
         )}
       >
         <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
@@ -73,7 +75,9 @@ export function Modal({
         </header>
         <div className="qm-scroll min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
         {footer ? (
-          <footer className="flex flex-wrap justify-end gap-2 border-t border-border px-5 py-3">{footer}</footer>
+          <footer className="flex flex-wrap justify-end gap-2 border-t border-border px-5 py-3">
+            {footer}
+          </footer>
         ) : null}
       </div>
     </dialog>

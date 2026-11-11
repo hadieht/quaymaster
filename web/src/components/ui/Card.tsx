@@ -4,7 +4,11 @@ import { TONE_CLASSES, type Tone } from '@/lib/status';
 import { Icon, type IconName } from './Icon';
 
 export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={cn('rounded-xl border border-border bg-surface shadow-card', className)}>{children}</section>;
+  return (
+    <section className={cn('rounded-xl border border-border bg-surface shadow-card', className)}>
+      {children}
+    </section>
+  );
 }
 
 export function CardHeader({
@@ -116,7 +120,10 @@ export function ProgressBar({ value, tone, label }: { value: number; tone?: Tone
       className="h-2 w-full overflow-hidden rounded-full bg-surface-2"
     >
       {/* width through a CSS custom property is not needed: CSSOM style writes are allowed by the CSP */}
-      <div className={cn('h-full rounded-full transition-all', TONE_CLASSES[t].bar)} style={{ width: `${pct}%` }} />
+      <div
+        className={cn('h-full rounded-full transition-all', TONE_CLASSES[t].bar)}
+        style={{ width: `${pct}%` }}
+      />
     </div>
   );
 }

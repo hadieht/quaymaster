@@ -19,14 +19,24 @@ export function PlanPanel() {
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const proj = projects.data?.find((p) => p.name === project);
-  const block = gate({ mutable: proj?.mutable, protectedReason: proj?.protectedReason, level: proj?.level, needsFull: true });
+  const block = gate({
+    mutable: proj?.mutable,
+    protectedReason: proj?.protectedReason,
+    level: proj?.level,
+    needsFull: true,
+  });
 
   const make = async () => {
     setBusy(true);
     setError(null);
     setPlan(null);
     try {
-      setPlan(await api.post<Plan>('/maintenance/plan', { project, ...(picked.length ? { services: picked } : {}) }));
+      setPlan(
+        await api.post<Plan>('/maintenance/plan', {
+          project,
+          ...(picked.length ? { services: picked } : {}),
+        }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The plan could not be created');
     } finally {
@@ -35,7 +45,11 @@ export function PlanPanel() {
   };
 
   const start = async () => {
-    const run = await api.post<RunInfo>('/maintenance/runs', { project, ...(picked.length ? { services: picked } : {}), startNow: false });
+    const run = await api.post<RunInfo>('/maintenance/runs', {
+      project,
+      ...(picked.length ? { services: picked } : {}),
+      startNow: false,
+    });
     navigate(`/maintenance/runs/${run.id}`);
   };
 
@@ -43,9 +57,18 @@ export function PlanPanel() {
     <div className="space-y-4">
       <Card>
         <CardBody className="space-y-4">
-          <p className="text-sm text-muted">A dry run shows exactly what an update would do. It changes nothing.</p>
+          <p className="text-sm text-muted">
+            A dry run shows exactly what an update would do. It changes nothing.
+          </p>
           <Field label="Project">
-            <Select value={project} onChange={(e) => { setProject(e.target.value); setPicked([]); setPlan(null); }}>
+            <Select
+              value={project}
+              onChange={(e) => {
+                setProject(e.target.value);
+                setPicked([]);
+                setPlan(null);
+              }}
+            >
               <option value="">Choose a project…</option>
               {(projects.data ?? []).map((p) => (
                 <option key={p.name} value={p.name}>
@@ -56,15 +79,28 @@ export function PlanPanel() {
           </Field>
           {proj ? (
             <fieldset>
-              <legend className="mb-1 text-sm font-medium">Services (none selected = all with updates)</legend>
+              <legend className="mb-1 text-sm font-medium">
+                Services (none selected = all with updates)
+              </legend>
               <div className="flex flex-wrap gap-x-4 gap-y-2">
                 {proj.services.map((s) => (
-                  <Checkbox key={s.name} label={s.name} checked={picked.includes(s.name)} onChange={(v) => setPicked(v ? [...picked, s.name] : picked.filter((x) => x !== s.name))} />
+                  <Checkbox
+                    key={s.name}
+                    label={s.name}
+                    checked={picked.includes(s.name)}
+                    onChange={(v) => setPicked(v ? [...picked, s.name] : picked.filter((x) => x !== s.name))}
+                  />
                 ))}
               </div>
             </fieldset>
           ) : null}
-          <Button variant="primary" icon="search" loading={busy} disabled={!project} onClick={() => void make()}>
+          <Button
+            variant="primary"
+            icon="search"
+            loading={busy}
+            disabled={!project}
+            onClick={() => void make()}
+          >
             Create dry-run plan
           </Button>
           {error ? <Notice tone="critical">{error}</Notice> : null}
@@ -75,8 +111,16 @@ export function PlanPanel() {
           <PlanView plan={plan} />
           <Card>
             <CardBody className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted">Happy with the plan? Save it as a run that waits for approval. Nothing is changed until you approve it.</p>
-              <Button variant="primary" icon="check" disabledReason={block ?? (plan.blocked ? plan.blocked.message : null)} onClick={() => setConfirm(true)}>
+              <p className="text-sm text-muted">
+                Happy with the plan? Save it as a run that waits for approval. Nothing is changed until you
+                approve it.
+              </p>
+              <Button
+                variant="primary"
+                icon="check"
+                disabledReason={block ?? (plan.blocked ? plan.blocked.message : null)}
+                onClick={() => setConfirm(true)}
+              >
                 Prepare run for approval…
               </Button>
             </CardBody>
@@ -84,7 +128,16 @@ export function PlanPanel() {
         </>
       ) : null}
       {confirm ? (
-        <ConfirmDialog open onClose={() => setConfirm(false)} title="Prepare run" target={project} variant="primary" confirmLabel="Prepare run" impact="A run is stored and appears in the approval queue. No container is changed until it is approved." onConfirm={start} />
+        <ConfirmDialog
+          open
+          onClose={() => setConfirm(false)}
+          title="Prepare run"
+          target={project}
+          variant="primary"
+          confirmLabel="Prepare run"
+          impact="A run is stored and appears in the approval queue. No container is changed until it is approved."
+          onConfirm={start}
+        />
       ) : null}
     </div>
   );

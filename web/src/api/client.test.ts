@@ -2,7 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, api, describeError, onUnauthorized, setCsrfToken } from './client';
 
 function mockFetch(status: number, body: unknown, headers: Record<string, string> = {}) {
-  const fn = vi.fn(async () => new Response(body === undefined ? '' : JSON.stringify(body), { status, headers }));
+  const fn = vi.fn(
+    async () => new Response(body === undefined ? '' : JSON.stringify(body), { status, headers }),
+  );
   vi.stubGlobal('fetch', fn);
   return fn;
 }
@@ -51,16 +53,26 @@ describe('api client', () => {
   });
 
   it('reports network failures and rate limits in plain words', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new TypeError('failed'))));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Promise.reject(new TypeError('failed'))),
+    );
     const net = await api.get('/x').catch((e: unknown) => e);
     expect(net).toMatchObject({ code: 'network', status: 0 });
-    mockFetch(429, { error: { code: 'rate_limited', message: 'Too many attempts.' } }, { 'Retry-After': '30' });
+    mockFetch(
+      429,
+      { error: { code: 'rate_limited', message: 'Too many attempts.' } },
+      { 'Retry-After': '30' },
+    );
     const rl = await api.post('/auth/login', {}).catch((e: unknown) => e);
     expect(describeError(rl)).toBe('Too many attempts. Try again in 30 s.');
   });
 
   it('tolerates non-JSON error bodies', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>bad gateway</html>', { status: 502 })));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('<html>bad gateway</html>', { status: 502 })),
+    );
     const err = await api.get('/x').catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 502, code: 'unknown' });
   });

@@ -128,7 +128,8 @@ export function useGate(): (g?: GateInput) => string | null {
       if (!isAdmin) return 'Your account has the viewer role: it can look but not change anything.';
       if (mode?.readOnly) return mode.readOnlyReason ?? 'Quaymaster is in read-only mode.';
       if (g.protectedReason) return g.protectedReason;
-      if (g.mutable === false) return 'This resource is outside the managed scope of this Quaymaster instance.';
+      if (g.mutable === false)
+        return 'This resource is outside the managed scope of this Quaymaster instance.';
       if (g.needsFull && g.level && g.level !== 'full') {
         return g.level === 'limited'
           ? 'Limited control: the Compose files are not trusted or readable, so this action is unavailable.'

@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Area, AreaChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { useTheme } from '@/state/theme';
 import { timeOnly } from '@/lib/format';
 
@@ -75,9 +86,20 @@ export function TimeChart<T extends { t: number }>({
         stroke={colors.grid}
         minTickGap={48}
       />
-      <YAxis tickFormatter={format} tick={tickStyle} stroke={colors.grid} width={56} domain={[0, yMax ?? 'auto']} />
+      <YAxis
+        tickFormatter={format}
+        tick={tickStyle}
+        stroke={colors.grid}
+        width={56}
+        domain={[0, yMax ?? 'auto']}
+      />
       <Tooltip
-        contentStyle={{ background: colors.surface, border: `1px solid ${colors.grid}`, borderRadius: 8, fontSize: 12 }}
+        contentStyle={{
+          background: colors.surface,
+          border: `1px solid ${colors.grid}`,
+          borderRadius: 8,
+          fontSize: 12,
+        }}
         labelStyle={{ color: colors.fg }}
         labelFormatter={(v) => timeOnly(Number(v))}
         formatter={(v, name) => [format(Number(v)), name]}
@@ -128,6 +150,10 @@ export function TimeChart<T extends { t: number }>({
   );
 }
 
-export function ChartEmpty({ children = 'Collecting data… the first points appear within a few seconds.' }: { children?: string }) {
+export function ChartEmpty({
+  children = 'Collecting data… the first points appear within a few seconds.',
+}: {
+  children?: string;
+}) {
   return <div className="flex h-[180px] items-center justify-center text-sm text-muted">{children}</div>;
 }

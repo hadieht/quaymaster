@@ -7,7 +7,15 @@ import type { OperationInfo } from '@/api/types';
 import { Badge, Button, Modal, Notice, Spinner } from '@/components/ui';
 
 /** Live output of a long operation (Compose action, image pull) from `/stream/operations/:id`. */
-export function OperationModal({ operationId, title, onClose }: { operationId: string | null; title: string; onClose: () => void }) {
+export function OperationModal({
+  operationId,
+  title,
+  onClose,
+}: {
+  operationId: string | null;
+  title: string;
+  onClose: () => void;
+}) {
   const invalidate = useInvalidateDocker();
   const [text, setText] = useState('');
   const [status, setStatus] = useState<'running' | 'succeeded' | 'failed'>('running');
@@ -66,7 +74,9 @@ export function OperationModal({ operationId, title, onClose }: { operationId: s
       description={
         <span className="inline-flex items-center gap-2">
           {status === 'running' ? <Spinner className="h-4 w-4" /> : null}
-          <Badge tone={status === 'succeeded' ? 'healthy' : status === 'failed' ? 'critical' : 'info'}>{status}</Badge>
+          <Badge tone={status === 'succeeded' ? 'healthy' : status === 'failed' ? 'critical' : 'info'}>
+            {status}
+          </Badge>
         </span>
       }
       footer={<Button onClick={onClose}>{status === 'running' ? 'Hide (keeps running)' : 'Close'}</Button>}

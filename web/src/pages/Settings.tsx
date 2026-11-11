@@ -4,7 +4,26 @@ import { api } from '@/api/client';
 import { q, useAction } from '@/api/hooks';
 import type { MonitorSettings, RegistryCredentialInfo } from '@/api/types';
 import { ScopeNotice } from '@/components/layout/AppShell';
-import { Badge, Button, Card, CardBody, CardHeader, ConfirmDialog, EmptyState, ErrorState, Field, Input, KeyValue, LoadingState, Modal, Notice, PageHeader, Switch, TabPanel, Tabs } from '@/components/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  ConfirmDialog,
+  EmptyState,
+  ErrorState,
+  Field,
+  Input,
+  KeyValue,
+  LoadingState,
+  Modal,
+  Notice,
+  PageHeader,
+  Switch,
+  TabPanel,
+  Tabs,
+} from '@/components/ui';
 import { bytes, dateTime, duration } from '@/lib/format';
 import { useAuth, useGate, useMode } from '@/state/auth';
 import { PolicyForm } from './maintenance/Policies';
@@ -19,7 +38,8 @@ function General() {
   const info = useQuery(q.info());
   const { mode } = useMode();
   if (settings.isLoading) return <LoadingState rows={4} />;
-  if (settings.error || !settings.data) return <ErrorState error={settings.error} onRetry={() => void settings.refetch()} />;
+  if (settings.error || !settings.data)
+    return <ErrorState error={settings.error} onRetry={() => void settings.refetch()} />;
   const s = settings.data;
   const h = health.data;
   return (
@@ -30,20 +50,50 @@ function General() {
           <KeyValue
             items={[
               ['Quaymaster', s.version],
-              ['Mode', mode?.readOnly ? <Badge key="m" tone="warning">read-only</Badge> : <Badge key="m" tone="healthy">read/write</Badge>],
+              [
+                'Mode',
+                mode?.readOnly ? (
+                  <Badge key="m" tone="warning">
+                    read-only
+                  </Badge>
+                ) : (
+                  <Badge key="m" tone="healthy">
+                    read/write
+                  </Badge>
+                ),
+              ],
               ['Managed scope', mode?.managedScope.join(', ') || 'everything'],
               ['Stack folders', mode?.stackPaths.join(', ') || '–'],
-              ['Docker engine', h ? `${h.engineVersion} (API ${h.daemonApiVersion})` : info.data?.ServerVersion ?? '–'],
+              [
+                'Docker engine',
+                h ? `${h.engineVersion} (API ${h.daemonApiVersion})` : (info.data?.ServerVersion ?? '–'),
+              ],
               ['Compose', h?.composeVersion ?? 'not found'],
-              ['Docker events', h ? <Badge key="e" tone={h.eventStream === 'connected' ? 'healthy' : 'critical'}>{h.eventStream}</Badge> : '–'],
+              [
+                'Docker events',
+                h ? (
+                  <Badge key="e" tone={h.eventStream === 'connected' ? 'healthy' : 'critical'}>
+                    {h.eventStream}
+                  </Badge>
+                ) : (
+                  '–'
+                ),
+              ],
               ['Uptime', h ? duration(h.uptimeSeconds) : '–'],
             ]}
           />
-          {mode?.readOnly ? <Notice tone="warning" className="mt-3">{mode.readOnlyReason ?? 'Read-only mode is on.'}</Notice> : null}
+          {mode?.readOnly ? (
+            <Notice tone="warning" className="mt-3">
+              {mode.readOnlyReason ?? 'Read-only mode is on.'}
+            </Notice>
+          ) : null}
         </CardBody>
       </Card>
       <Card>
-        <CardHeader title="Security configuration" description="Set at startup through environment variables." />
+        <CardHeader
+          title="Security configuration"
+          description="Set at startup through environment variables."
+        />
         <CardBody>
           <KeyValue
             items={[
@@ -58,7 +108,10 @@ function General() {
         </CardBody>
       </Card>
       <Card className="lg:col-span-2">
-        <CardHeader title="Retention" description="How long Quaymaster keeps its own records. Configured at startup." />
+        <CardHeader
+          title="Retention"
+          description="How long Quaymaster keeps its own records. Configured at startup."
+        />
         <CardBody>
           <KeyValue
             items={[
@@ -85,8 +138,16 @@ function Registries() {
   const [f, setF] = useState({ host: '', username: '', password: '' });
   const [error, setError] = useState<string | null>(null);
   const block = gate();
-  const save = useAction((b: typeof f) => api.put('/registries/credentials', b), { success: 'Credentials saved (encrypted)', invalidate: ['credentials', 'updates'], quietError: true });
-  const remove = useAction((host: string) => api.del(`/registries/credentials/${encodeURIComponent(host)}`), { success: 'Credentials removed', invalidate: ['credentials'], quietError: true });
+  const save = useAction((b: typeof f) => api.put('/registries/credentials', b), {
+    success: 'Credentials saved (encrypted)',
+    invalidate: ['credentials', 'updates'],
+    quietError: true,
+  });
+  const remove = useAction((host: string) => api.del(`/registries/credentials/${encodeURIComponent(host)}`), {
+    success: 'Credentials removed',
+    invalidate: ['credentials'],
+    quietError: true,
+  });
   const submit = async () => {
     setError(null);
     try {
@@ -99,9 +160,29 @@ function Registries() {
   };
   return (
     <Card>
-      <CardHeader title="Registry logins" description="Used to check and pull images from private registries. Passwords are stored encrypted and never shown." actions={<Button size="sm" icon="plus" variant="primary" disabledReason={block} onClick={() => setAdding(true)}>Add registry</Button>} />
-      {creds.isLoading ? <LoadingState rows={2} /> : creds.error ? <ErrorState error={creds.error} /> : (creds.data?.credentials.length ?? 0) === 0 ? (
-        <EmptyState icon="lock" title="No registry logins">Public images (Docker Hub, GHCR) work without one.</EmptyState>
+      <CardHeader
+        title="Registry logins"
+        description="Used to check and pull images from private registries. Passwords are stored encrypted and never shown."
+        actions={
+          <Button
+            size="sm"
+            icon="plus"
+            variant="primary"
+            disabledReason={block}
+            onClick={() => setAdding(true)}
+          >
+            Add registry
+          </Button>
+        }
+      />
+      {creds.isLoading ? (
+        <LoadingState rows={2} />
+      ) : creds.error ? (
+        <ErrorState error={creds.error} />
+      ) : (creds.data?.credentials.length ?? 0) === 0 ? (
+        <EmptyState icon="lock" title="No registry logins">
+          Public images (Docker Hub, GHCR) work without one.
+        </EmptyState>
       ) : (
         <ul className="divide-y divide-border">
           {creds.data?.credentials.map((c) => (
@@ -109,22 +190,82 @@ function Registries() {
               <span className="font-medium">{c.host}</span>
               <span className="text-muted">{c.username}</span>
               <span className="text-xs text-muted">updated {dateTime(c.updatedAt)}</span>
-              <Button className="ml-auto" size="sm" variant="ghost" icon="trash" aria-label={`Remove ${c.host}`} disabledReason={block} onClick={() => setDel(c)} />
+              <Button
+                className="ml-auto"
+                size="sm"
+                variant="ghost"
+                icon="trash"
+                aria-label={`Remove ${c.host}`}
+                disabledReason={block}
+                onClick={() => setDel(c)}
+              />
             </li>
           ))}
         </ul>
       )}
       {adding ? (
-        <Modal open onClose={() => setAdding(false)} title="Add registry login" footer={<><Button onClick={() => setAdding(false)}>Cancel</Button><Button variant="primary" loading={save.isPending} disabled={!f.host || !f.username || !f.password} onClick={() => void submit()}>Save</Button></>}>
-          <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+        <Modal
+          open
+          onClose={() => setAdding(false)}
+          title="Add registry login"
+          footer={
+            <>
+              <Button onClick={() => setAdding(false)}>Cancel</Button>
+              <Button
+                variant="primary"
+                loading={save.isPending}
+                disabled={!f.host || !f.username || !f.password}
+                onClick={() => void submit()}
+              >
+                Save
+              </Button>
+            </>
+          }
+        >
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submit();
+            }}
+          >
             {error ? <Notice tone="critical">{error}</Notice> : null}
-            <Field label="Registry host" hint="For example ghcr.io or registry.example.com:5000"><Input value={f.host} onChange={(e) => setF({ ...f, host: e.target.value })} autoComplete="off" /></Field>
-            <Field label="Username"><Input value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} autoComplete="off" /></Field>
-            <Field label="Password or access token" hint="Write-only."><Input type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} autoComplete="new-password" /></Field>
+            <Field label="Registry host" hint="For example ghcr.io or registry.example.com:5000">
+              <Input
+                value={f.host}
+                onChange={(e) => setF({ ...f, host: e.target.value })}
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Username">
+              <Input
+                value={f.username}
+                onChange={(e) => setF({ ...f, username: e.target.value })}
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="Password or access token" hint="Write-only.">
+              <Input
+                type="password"
+                value={f.password}
+                onChange={(e) => setF({ ...f, password: e.target.value })}
+                autoComplete="new-password"
+              />
+            </Field>
           </form>
         </Modal>
       ) : null}
-      {del ? <ConfirmDialog open onClose={() => setDel(null)} title="Remove registry login" target={del.host} confirmLabel="Remove" impact="Images from this registry are checked anonymously again; private images will show as unknown." onConfirm={() => remove.mutateAsync(del.host)} /> : null}
+      {del ? (
+        <ConfirmDialog
+          open
+          onClose={() => setDel(null)}
+          title="Remove registry login"
+          target={del.host}
+          confirmLabel="Remove"
+          impact="Images from this registry are checked anonymously again; private images will show as unknown."
+          onConfirm={() => remove.mutateAsync(del.host)}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -137,7 +278,15 @@ function DefaultPolicy() {
   const gate = useGate();
   return (
     <Card>
-      <CardHeader title="Default update policy" description="Applies to everything without a more specific policy. Per-project and per-service policies live under Maintenance → Policies." actions={<Button size="sm" icon="edit" disabledReason={gate()} onClick={() => setEdit(true)}>{rec ? 'Edit' : 'Set default'}</Button>} />
+      <CardHeader
+        title="Default update policy"
+        description="Applies to everything without a more specific policy. Per-project and per-service policies live under Maintenance → Policies."
+        actions={
+          <Button size="sm" icon="edit" disabledReason={gate()} onClick={() => setEdit(true)}>
+            {rec ? 'Edit' : 'Set default'}
+          </Button>
+        }
+      />
       <CardBody className="text-sm">
         {rec ? (
           <KeyValue
@@ -146,14 +295,24 @@ function DefaultPolicy() {
               ['Critical', rec.policy.critical ? 'yes' : 'no'],
               ['Approval required', rec.policy.requireApproval === false ? 'no' : 'yes'],
               ['Automatic rollback', rec.policy.autoRollback === false ? 'off' : 'on'],
-              ['Health timeout', rec.policy.health?.timeoutSeconds ? `${rec.policy.health.timeoutSeconds}s` : 'built-in'],
+              [
+                'Health timeout',
+                rec.policy.health?.timeoutSeconds ? `${rec.policy.health.timeoutSeconds}s` : 'built-in',
+              ],
             ]}
           />
         ) : (
-          <p className="text-muted">Built-in defaults: updates are reported only, and every update needs approval.{isAdmin ? '' : ''}</p>
+          <p className="text-muted">
+            Built-in defaults: updates are reported only, and every update needs approval.{isAdmin ? '' : ''}
+          </p>
         )}
       </CardBody>
-      {edit ? <PolicyForm initial={rec ?? { scopeKind: 'global', scopeKey: '*', policy: {}, updatedAt: '' }} onClose={() => setEdit(false)} /> : null}
+      {edit ? (
+        <PolicyForm
+          initial={rec ?? { scopeKind: 'global', scopeKey: '*', policy: {}, updatedAt: '' }}
+          onClose={() => setEdit(false)}
+        />
+      ) : null}
     </Card>
   );
 }
@@ -164,41 +323,73 @@ function Thresholds() {
   const [f, setF] = useState<MonitorSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const block = gate();
-  const save = useAction((b: MonitorSettings) => api.put<MonitorSettings>('/monitors/settings', b), { success: 'Thresholds saved', invalidate: ['monitors'], quietError: true });
+  const save = useAction((b: MonitorSettings) => api.put<MonitorSettings>('/monitors/settings', b), {
+    success: 'Thresholds saved',
+    invalidate: ['monitors'],
+    quietError: true,
+  });
   if (monitors.isLoading) return <LoadingState rows={3} />;
   if (monitors.error || !monitors.data) return <ErrorState error={monitors.error} />;
   const cur = f ?? monitors.data;
   const set = (k: keyof MonitorSettings, v: number | boolean) => setF({ ...cur, [k]: v });
   const num = (k: keyof MonitorSettings, label: string, hint?: string) => (
     <Field label={label} hint={hint}>
-      <Input type="number" value={String(cur[k])} onChange={(e) => set(k, Number(e.target.value))} disabled={!!block} />
+      <Input
+        type="number"
+        value={String(cur[k])}
+        onChange={(e) => set(k, Number(e.target.value))}
+        disabled={!!block}
+      />
     </Field>
   );
   return (
     <Card>
-      <CardHeader title="Alert thresholds" description="When Quaymaster raises notifications about the host and containers." />
+      <CardHeader
+        title="Alert thresholds"
+        description="When Quaymaster raises notifications about the host and containers."
+      />
       <CardBody>
         <form
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             setError(null);
-            save.mutateAsync(cur).then(() => setF(null), (err: unknown) => setError(err instanceof Error ? err.message : 'Could not save'));
+            save.mutateAsync(cur).then(
+              () => setF(null),
+              (err: unknown) => setError(err instanceof Error ? err.message : 'Could not save'),
+            );
           }}
         >
           {error ? <Notice tone="critical">{error}</Notice> : null}
-          <Switch checked={cur.enabled} disabled={!!block} onChange={(v) => set('enabled', v)} label="Monitoring alerts enabled" />
+          <Switch
+            checked={cur.enabled}
+            disabled={!!block}
+            onChange={(v) => set('enabled', v)}
+            label="Monitoring alerts enabled"
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             {num('diskFreePercentBelow', 'Disk free below (%)')}
             {num('diskFreeBytesBelow', 'Disk free below (bytes)')}
             {num('cpuPercentAbove', 'CPU above (%)')}
             {num('memoryPercentAbove', 'Memory above (%)')}
-            {num('sustainSeconds', 'Sustained for (seconds)', 'CPU and memory must stay above the limit this long.')}
+            {num(
+              'sustainSeconds',
+              'Sustained for (seconds)',
+              'CPU and memory must stay above the limit this long.',
+            )}
             {num('restartLoopCount', 'Restart loop: restarts')}
             {num('restartLoopWindowSeconds', 'Restart loop: within (seconds)')}
             {num('upcomingMaintenanceMinutes', 'Warn about maintenance (minutes ahead)')}
           </div>
-          <Button type="submit" variant="primary" loading={save.isPending} disabledReason={block} disabled={!f}>Save thresholds</Button>
+          <Button
+            type="submit"
+            variant="primary"
+            loading={save.isPending}
+            disabledReason={block}
+            disabled={!f}
+          >
+            Save thresholds
+          </Button>
         </form>
       </CardBody>
     </Card>

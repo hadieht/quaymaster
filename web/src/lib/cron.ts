@@ -1,5 +1,18 @@
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
 
 export const CRON_PRESETS: { label: string; cron: string }[] = [
   { label: 'Every night at 03:00', cron: '0 3 * * *' },
@@ -33,7 +46,8 @@ export function describeCron(expr: string): string | null {
   else if (min === '*' && hour === '*') when = 'every minute';
   else if (/^\*\/(\d+)$/.test(min) && hour === '*') when = `every ${/^\*\/(\d+)$/.exec(min)![1]} minutes`;
   else if (/^\d+$/.test(min) && hour === '*') when = `at minute ${min} of every hour`;
-  else if (/^\d+$/.test(min) && /^\*\/(\d+)$/.test(hour)) when = `at minute ${min} every ${/^\*\/(\d+)$/.exec(hour)![1]} hours`;
+  else if (/^\d+$/.test(min) && /^\*\/(\d+)$/.test(hour))
+    when = `at minute ${min} every ${/^\*\/(\d+)$/.exec(hour)![1]} hours`;
   else return null;
 
   let day = '';

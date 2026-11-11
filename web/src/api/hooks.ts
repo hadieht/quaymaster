@@ -4,7 +4,6 @@ import { useToast } from '@/components/ui/Toast';
 import type {
   AuditEntry,
   ChannelTypeInfo,
-  CleanupPreview,
   ComposeProjectDetail,
   ComposeProjectSummary,
   ComposeValidation,
@@ -47,13 +46,21 @@ const SECOND = 1000;
 
 /** Read queries. Lists refresh in the background so the UI stays current even without SSE. */
 export const q = {
-  mode: () => ({ queryKey: ['mode'], queryFn: () => api.get<ModeInfo>('/system/mode'), staleTime: 60 * SECOND }),
+  mode: () => ({
+    queryKey: ['mode'],
+    queryFn: () => api.get<ModeInfo>('/system/mode'),
+    staleTime: 60 * SECOND,
+  }),
   health: () => ({
     queryKey: ['health'],
     queryFn: () => api.get<HealthInfo>('/system/health'),
     refetchInterval: 30 * SECOND,
   }),
-  info: () => ({ queryKey: ['info'], queryFn: () => api.get<DockerInfoLite>('/system/info'), staleTime: 60 * SECOND }),
+  info: () => ({
+    queryKey: ['info'],
+    queryFn: () => api.get<DockerInfoLite>('/system/info'),
+    staleTime: 60 * SECOND,
+  }),
   host: () => ({
     queryKey: ['host'],
     queryFn: () => api.get<HostMetrics>('/system/host'),
@@ -107,7 +114,10 @@ export const q = {
   }),
   projectConfig: (name: string, enabled: boolean) => ({
     queryKey: ['project-config', name],
-    queryFn: () => api.get<{ config: unknown; warnings: string[] }>(`/compose/projects/${encodeURIComponent(name)}/config`),
+    queryFn: () =>
+      api.get<{ config: unknown; warnings: string[] }>(
+        `/compose/projects/${encodeURIComponent(name)}/config`,
+      ),
     enabled,
     retry: false,
   }),
@@ -117,7 +127,11 @@ export const q = {
     enabled,
     retry: false,
   }),
-  images: () => ({ queryKey: ['images'], queryFn: () => api.get<ImageSummary[]>('/images'), refetchInterval: 30 * SECOND }),
+  images: () => ({
+    queryKey: ['images'],
+    queryFn: () => api.get<ImageSummary[]>('/images'),
+    refetchInterval: 30 * SECOND,
+  }),
   updates: () => ({
     queryKey: ['updates'],
     queryFn: () => api.get<{ images: ImageUpdateStatus[] }>('/updates'),
@@ -132,8 +146,16 @@ export const q = {
     queryKey: ['quarantine'],
     queryFn: () => api.get<{ entries: QuarantineEntry[] }>('/updates/quarantine'),
   }),
-  volumes: () => ({ queryKey: ['volumes'], queryFn: () => api.get<VolumeSummary[]>('/volumes'), refetchInterval: 30 * SECOND }),
-  networks: () => ({ queryKey: ['networks'], queryFn: () => api.get<NetworkSummary[]>('/networks'), refetchInterval: 30 * SECOND }),
+  volumes: () => ({
+    queryKey: ['volumes'],
+    queryFn: () => api.get<VolumeSummary[]>('/volumes'),
+    refetchInterval: 30 * SECOND,
+  }),
+  networks: () => ({
+    queryKey: ['networks'],
+    queryFn: () => api.get<NetworkSummary[]>('/networks'),
+    refetchInterval: 30 * SECOND,
+  }),
   events: (limit: number, filters: { container?: string; project?: string } = {}) => ({
     queryKey: ['events', limit, filters],
     queryFn: () => api.get<{ events: DockerEventRecord[] }>('/events', { limit, ...filters }),
@@ -194,13 +216,19 @@ export const q = {
     queryFn: () => api.get<{ credentials: RegistryCredentialInfo[] }>('/registries/credentials'),
   }),
   users: () => ({ queryKey: ['users'], queryFn: () => api.get<UserInfo[]>('/users') }),
-  sessions: () => ({ queryKey: ['sessions'], queryFn: () => api.get<{ sessions: SessionEntry[] }>('/auth/sessions') }),
+  sessions: () => ({
+    queryKey: ['sessions'],
+    queryFn: () => api.get<{ sessions: SessionEntry[] }>('/auth/sessions'),
+  }),
   overview: (minutes: number) => ({
     queryKey: ['overview', minutes],
     queryFn: () =>
-      api.get<{ points: { t: number; cpu: number; mem: number; netRx: number; netTx: number }[] }>('/stats/overview', {
-        minutes,
-      }),
+      api.get<{ points: { t: number; cpu: number; mem: number; netRx: number; netTx: number }[] }>(
+        '/stats/overview',
+        {
+          minutes,
+        },
+      ),
     refetchInterval: 30 * SECOND,
   }),
   cronPreview: (cron: string, timezone: string) => ({
@@ -212,12 +240,30 @@ export const q = {
   }),
 };
 
-export function useApiQuery<T>(opts: { queryKey: QueryKey; queryFn: () => Promise<T>; [k: string]: unknown }) {
+export function useApiQuery<T>(opts: {
+  queryKey: QueryKey;
+  queryFn: () => Promise<T>;
+  [k: string]: unknown;
+}) {
   return useQuery(opts as never) as ReturnType<typeof useQuery<T>>;
 }
 
 /** Keys invalidated after any state-changing action (Docker state changes in many views at once). */
-const DOCKER_KEYS = ['containers', 'container', 'projects', 'project', 'images', 'updates', 'staged', 'volumes', 'networks', 'df', 'runs', 'run', 'operations'];
+const DOCKER_KEYS = [
+  'containers',
+  'container',
+  'projects',
+  'project',
+  'images',
+  'updates',
+  'staged',
+  'volumes',
+  'networks',
+  'df',
+  'runs',
+  'run',
+  'operations',
+];
 
 export function useInvalidateDocker() {
   const qc = useQueryClient();
@@ -232,7 +278,12 @@ export function useInvalidateDocker() {
  */
 export function useAction<V, R = unknown>(
   fn: (v: V) => Promise<R>,
-  opts: { success?: string | ((r: R, v: V) => string); invalidate?: string[]; docker?: boolean; quietError?: boolean } = {},
+  opts: {
+    success?: string | ((r: R, v: V) => string);
+    invalidate?: string[];
+    docker?: boolean;
+    quietError?: boolean;
+  } = {},
 ) {
   const qc = useQueryClient();
   const toast = useToast();

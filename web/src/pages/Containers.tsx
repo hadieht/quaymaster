@@ -50,19 +50,26 @@ export default function Containers() {
       { replace: true },
     );
 
-  const all = list.data ?? [];
+  const all = useMemo(() => list.data ?? [], [list.data]);
   const problems = useMemo(() => new Set(needsAttention(all).map((a) => a.container.id)), [all]);
-  const projects = useMemo(() => [...new Set(all.map((c) => c.composeProject).filter((p): p is string => !!p))].sort(), [all]);
+  const projects = useMemo(
+    () => [...new Set(all.map((c) => c.composeProject).filter((p): p is string => !!p))].sort(),
+    [all],
+  );
 
   const rows = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return all.filter((c) => {
       if (state === 'running' && c.state !== 'running') return false;
-      if (state === 'stopped' && (c.state === 'running' || c.state === 'restarting' || c.state === 'paused')) return false;
+      if (state === 'stopped' && (c.state === 'running' || c.state === 'restarting' || c.state === 'paused'))
+        return false;
       if (state === 'problems' && !problems.has(c.id)) return false;
-      if (project === '__none' ? c.composeProject !== null : project && c.composeProject !== project) return false;
+      if (project === '__none' ? c.composeProject !== null : project && c.composeProject !== project)
+        return false;
       if (!needle) return true;
-      return [c.name, c.image, c.composeProject ?? '', c.composeService ?? '', c.shortId].some((s) => s.toLowerCase().includes(needle));
+      return [c.name, c.image, c.composeProject ?? '', c.composeService ?? '', c.shortId].some((s) =>
+        s.toLowerCase().includes(needle),
+      );
     });
   }, [all, query, state, project, problems]);
 
@@ -115,14 +122,24 @@ export default function Containers() {
       hideOnSmall: true,
       sort: (a, b) => (a.restartCount ?? 0) - (b.restartCount ?? 0),
       cell: (c) =>
-        (c.restartCount ?? 0) > 0 ? <Badge tone={c.restartCount! >= 5 ? 'warning' : 'inactive'} dot={false}>{c.restartCount}</Badge> : <span className="text-muted">0</span>,
+        (c.restartCount ?? 0) > 0 ? (
+          <Badge tone={c.restartCount! >= 5 ? 'warning' : 'inactive'} dot={false}>
+            {c.restartCount}
+          </Badge>
+        ) : (
+          <span className="text-muted">0</span>
+        ),
     },
     {
       key: 'image',
       header: 'Image',
       hideOnSmall: true,
       sort: (a, b) => a.image.localeCompare(b.image),
-      cell: (c) => <span className="block max-w-56 truncate font-mono text-xs text-muted" title={c.image}>{c.image}</span>,
+      cell: (c) => (
+        <span className="block max-w-56 truncate font-mono text-xs text-muted" title={c.image}>
+          {c.image}
+        </span>
+      ),
     },
     {
       key: 'cpu',
@@ -146,7 +163,11 @@ export default function Containers() {
         title="Containers"
         description="Every container on this Docker host. Select one to see logs, resources and configuration."
         actions={
-          <Button icon="refresh" onClick={() => void list.refetch()} loading={list.isFetching && !list.isLoading}>
+          <Button
+            icon="refresh"
+            onClick={() => void list.refetch()}
+            loading={list.isFetching && !list.isLoading}
+          >
             Refresh
           </Button>
         }
@@ -154,7 +175,12 @@ export default function Containers() {
       <ScopeNotice />
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
-          <SearchInput value={query} onChange={(v) => set('q', v)} placeholder="Search name, image, project…" label="Search containers" />
+          <SearchInput
+            value={query}
+            onChange={(v) => set('q', v)}
+            placeholder="Search name, image, project…"
+            label="Search containers"
+          />
           <Segmented<StateFilter>
             label="Filter by state"
             value={state}
@@ -162,11 +188,20 @@ export default function Containers() {
             options={[
               { key: 'all', label: 'All', count: all.length },
               { key: 'running', label: 'Running', count: all.filter((c) => c.state === 'running').length },
-              { key: 'stopped', label: 'Stopped', count: all.filter((c) => !['running', 'restarting', 'paused'].includes(c.state)).length },
+              {
+                key: 'stopped',
+                label: 'Stopped',
+                count: all.filter((c) => !['running', 'restarting', 'paused'].includes(c.state)).length,
+              },
               { key: 'problems', label: 'Problems', count: problems.size },
             ]}
           />
-          <Select aria-label="Filter by project" value={project} onChange={(e) => set('project', e.target.value)} className="w-44">
+          <Select
+            aria-label="Filter by project"
+            value={project}
+            onChange={(e) => set('project', e.target.value)}
+            className="w-44"
+          >
             <option value="">All projects</option>
             <option value="__none">Standalone only</option>
             {projects.map((p) => (
@@ -187,7 +222,11 @@ export default function Containers() {
         {list.isLoading ? (
           <LoadingState rows={6} />
         ) : list.error ? (
-          <ErrorState error={list.error} onRetry={() => void list.refetch()} title="Could not load containers" />
+          <ErrorState
+            error={list.error}
+            onRetry={() => void list.refetch()}
+            title="Could not load containers"
+          />
         ) : (
           <DataTable
             caption="Containers"
@@ -199,13 +238,17 @@ export default function Containers() {
             empty={{
               icon: 'box',
               title: all.length === 0 ? 'No containers' : 'No container matches the filters',
-              text: all.length === 0 ? 'There are no containers on this Docker host.' : 'Try a different search or clear the filters.',
+              text:
+                all.length === 0
+                  ? 'There are no containers on this Docker host.'
+                  : 'Try a different search or clear the filters.',
             }}
           />
         )}
       </Card>
       <p className="mt-3 text-xs text-muted">
-        <Tag>Tip</Tag> CPU and memory update live. Restart counts come from Docker and can lag by a few seconds.
+        <Tag>Tip</Tag> CPU and memory update live. Restart counts come from Docker and can lag by a few
+        seconds.
       </p>
     </>
   );

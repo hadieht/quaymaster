@@ -25,7 +25,11 @@ export function ContainerStatus({ c }: { c: Pick<ContainerSummary, 'state' | 'he
 
 export function HealthBadge({ health }: { health: ContainerSummary['health'] }) {
   if (health === 'none') return <span className="text-muted">–</span>;
-  return <Badge tone={health === 'healthy' ? 'healthy' : health === 'starting' ? 'warning' : 'critical'}>{health}</Badge>;
+  return (
+    <Badge tone={health === 'healthy' ? 'healthy' : health === 'starting' ? 'warning' : 'critical'}>
+      {health}
+    </Badge>
+  );
 }
 
 export function UpdateBadge({ state }: { state: UpdateState }) {

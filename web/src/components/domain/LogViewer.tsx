@@ -3,7 +3,16 @@ import { useQuery } from '@tanstack/react-query';
 import { q } from '@/api/hooks';
 import { openStream, type StreamStatus } from '@/api/stream';
 import type { LogLineDto } from '@/api/types';
-import { Button, Checkbox, ErrorState, Icon, LoadingState, Notice, SearchInput, Select } from '@/components/ui';
+import {
+  Button,
+  Checkbox,
+  ErrorState,
+  Icon,
+  LoadingState,
+  Notice,
+  SearchInput,
+  Select,
+} from '@/components/ui';
 import { cn } from '@/lib/cn';
 import { useAuth } from '@/state/auth';
 
@@ -71,7 +80,7 @@ export function LogViewer({ containerRef, name }: { containerRef: string; name: 
     });
   }, [containerRef, tail, follow, canReadLogs]);
 
-  const lines = follow ? live : (snapshot.data?.lines ?? []);
+  const lines = useMemo(() => (follow ? live : (snapshot.data?.lines ?? [])), [follow, live, snapshot.data]);
   const shown = useMemo(() => {
     if (!search || !onlyMatches) return lines;
     const n = search.toLowerCase();
@@ -96,7 +105,9 @@ export function LogViewer({ containerRef, name }: { containerRef: string; name: 
   }, []);
 
   const download = () => {
-    const text = shown.map((l) => `${stamps && l.ts ? `${l.ts} ` : ''}${l.stream === 'stderr' ? '[stderr] ' : ''}${l.text}`).join('\n');
+    const text = shown
+      .map((l) => `${stamps && l.ts ? `${l.ts} ` : ''}${l.stream === 'stderr' ? '[stderr] ' : ''}${l.text}`)
+      .join('\n');
     const url = URL.createObjectURL(new Blob([`${text}\n`], { type: 'text/plain' }));
     const a = document.createElement('a');
     a.href = url;
@@ -108,7 +119,8 @@ export function LogViewer({ containerRef, name }: { containerRef: string; name: 
   if (!canReadLogs) {
     return (
       <Notice tone="warning" title="Logs are not available to your account">
-        Reading container logs is a separate permission. An administrator can grant it in Settings → Security → Users.
+        Reading container logs is a separate permission. An administrator can grant it in Settings → Security
+        → Users.
       </Notice>
     );
   }
@@ -117,7 +129,12 @@ export function LogViewer({ containerRef, name }: { containerRef: string; name: 
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <SearchInput value={search} onChange={setSearch} placeholder="Search in log…" label="Search logs" />
-        <Select aria-label="Lines to load" value={tail} onChange={(e) => setTail(Number(e.target.value))} className="w-36">
+        <Select
+          aria-label="Lines to load"
+          value={tail}
+          onChange={(e) => setTail(Number(e.target.value))}
+          className="w-36"
+        >
           {[100, 200, 500, 1000, 2000].map((n) => (
             <option key={n} value={n}>
               Last {n} lines
@@ -147,7 +164,11 @@ export function LogViewer({ containerRef, name }: { containerRef: string; name: 
       {!follow && snapshot.isLoading ? (
         <LoadingState label="Loading logs…" />
       ) : !follow && snapshot.error ? (
-        <ErrorState error={snapshot.error} onRetry={() => void snapshot.refetch()} title="Could not read the logs" />
+        <ErrorState
+          error={snapshot.error}
+          onRetry={() => void snapshot.refetch()}
+          title="Could not read the logs"
+        />
       ) : (
         <div className="relative">
           <div
@@ -159,12 +180,27 @@ export function LogViewer({ containerRef, name }: { containerRef: string; name: 
             className="qm-scroll h-[28rem] overflow-auto rounded-lg border border-border bg-[rgb(var(--surface-2))] p-2 font-mono text-xs leading-5"
           >
             {shown.length === 0 ? (
-              <div className="p-4 text-center text-muted">{lines.length === 0 ? 'No log output yet.' : 'No line matches the search.'}</div>
+              <div className="p-4 text-center text-muted">
+                {lines.length === 0 ? 'No log output yet.' : 'No line matches the search.'}
+              </div>
             ) : (
               shown.map((l, i) => (
-                <div key={i} className={cn('flex gap-2 px-1 hover:bg-surface/60', l.stream === 'stderr' && 'text-critical')}>
-                  {stamps && l.ts ? <span className="shrink-0 select-none text-muted">{lineTime(l.ts)}</span> : null}
-                  <span className={cn('min-w-0 flex-1', wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre')}>
+                <div
+                  key={i}
+                  className={cn(
+                    'flex gap-2 px-1 hover:bg-surface/60',
+                    l.stream === 'stderr' && 'text-critical',
+                  )}
+                >
+                  {stamps && l.ts ? (
+                    <span className="shrink-0 select-none text-muted">{lineTime(l.ts)}</span>
+                  ) : null}
+                  <span
+                    className={cn(
+                      'min-w-0 flex-1',
+                      wrap ? 'whitespace-pre-wrap break-all' : 'whitespace-pre',
+                    )}
+                  >
                     <Highlight text={l.text} needle={search} />
                   </span>
                 </div>
@@ -185,7 +221,9 @@ export function LogViewer({ containerRef, name }: { containerRef: string; name: 
           ) : null}
         </div>
       )}
-      <p className="text-xs text-muted">Secrets that Quaymaster knows about are masked in log output. Showing at most {MAX_LINES} lines.</p>
+      <p className="text-xs text-muted">
+        Secrets that Quaymaster knows about are masked in log output. Showing at most {MAX_LINES} lines.
+      </p>
     </div>
   );
 }

@@ -13,7 +13,13 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 /** Layered dependency diagram (left = started first) plus an accessible text list of the same edges. */
-export function DependencyGraphView({ graph, statusOf }: { graph: Graph; statusOf?: (service: string) => string | undefined }) {
+export function DependencyGraphView({
+  graph,
+  statusOf,
+}: {
+  graph: Graph;
+  statusOf?: (service: string) => string | undefined;
+}) {
   const layout = useMemo(() => {
     const deps = new Map<string, string[]>(graph.nodes.map((n) => [n, []]));
     for (const e of graph.edges) deps.get(e.from)?.push(e.to);
@@ -44,7 +50,14 @@ export function DependencyGraphView({ graph, statusOf }: { graph: Graph; statusO
   }, [graph]);
 
   if (graph.nodes.length === 0) return <p className="text-sm text-muted">No services.</p>;
-  const tone = (s?: string) => (s === 'running' ? 'rgb(var(--healthy))' : s === 'unhealthy' ? 'rgb(var(--critical))' : s === 'partial' ? 'rgb(var(--warning))' : 'rgb(var(--inactive))');
+  const tone = (s?: string) =>
+    s === 'running'
+      ? 'rgb(var(--healthy))'
+      : s === 'unhealthy'
+        ? 'rgb(var(--critical))'
+        : s === 'partial'
+          ? 'rgb(var(--warning))'
+          : 'rgb(var(--inactive))';
 
   return (
     <div className="space-y-3">
@@ -54,9 +67,23 @@ export function DependencyGraphView({ graph, statusOf }: { graph: Graph; statusO
         </p>
       ) : null}
       <div className="qm-scroll overflow-x-auto">
-        <svg width={layout.width} height={layout.height} role="img" aria-label="Service dependency diagram" className="min-w-full">
+        <svg
+          width={layout.width}
+          height={layout.height}
+          role="img"
+          aria-label="Service dependency diagram"
+          className="min-w-full"
+        >
           <defs>
-            <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+            <marker
+              id="arrow"
+              viewBox="0 0 8 8"
+              refX="7"
+              refY="4"
+              markerWidth="7"
+              markerHeight="7"
+              orient="auto"
+            >
               <path d="M0 0L8 4L0 8z" className="fill-muted" />
             </marker>
           </defs>
@@ -89,7 +116,13 @@ export function DependencyGraphView({ graph, statusOf }: { graph: Graph; statusO
             if (!p) return null;
             return (
               <g key={n} transform={`translate(${p.x} ${p.y})`}>
-                <rect width={BOX_W} height={BOX_H} rx={8} className="fill-surface stroke-border" strokeWidth={1} />
+                <rect
+                  width={BOX_W}
+                  height={BOX_H}
+                  rx={8}
+                  className="fill-surface stroke-border"
+                  strokeWidth={1}
+                />
                 <circle cx={14} cy={BOX_H / 2} r={4.5} fill={tone(statusOf?.(n))} />
                 <text x={26} y={BOX_H / 2 + 4} className="fill-fg text-[12px]">
                   {n.length > 18 ? `${n.slice(0, 17)}…` : n}
@@ -99,12 +132,16 @@ export function DependencyGraphView({ graph, statusOf }: { graph: Graph; statusO
           })}
         </svg>
       </div>
-      <p className="text-xs text-muted">Left to right is start order. Solid lines: depends_on. Dashed lines: shared namespace or volumes.</p>
+      <p className="text-xs text-muted">
+        Left to right is start order. Solid lines: depends_on. Dashed lines: shared namespace or volumes.
+      </p>
       <ul className="space-y-0.5 text-sm">
         {graph.edges.length === 0 ? <li className="text-muted">No dependencies between services.</li> : null}
         {graph.edges.map((e, i) => (
           <li key={i}>
-            <b className="font-medium">{e.from}</b> <span className="text-muted">{KIND_LABEL[e.kind] ?? e.kind}</span> <b className="font-medium">{e.to}</b>
+            <b className="font-medium">{e.from}</b>{' '}
+            <span className="text-muted">{KIND_LABEL[e.kind] ?? e.kind}</span>{' '}
+            <b className="font-medium">{e.to}</b>
             {e.condition ? <span className="text-muted"> ({e.condition})</span> : null}
           </li>
         ))}

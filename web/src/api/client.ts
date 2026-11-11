@@ -50,7 +50,8 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
   const url = `${API_BASE}${path}`;
   if (!query) return url;
   const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(query)) if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+  for (const [k, v] of Object.entries(query))
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
   const s = qs.toString();
   return s ? `${url}?${s}` : url;
 }

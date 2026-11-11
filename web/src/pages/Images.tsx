@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { q, useAction, useInvalidateDocker } from '@/api/hooks';
-import type { CleanupCategory, CleanupPreview, CleanupResult, ImageSummary, ImageUpdateStatus } from '@/api/types';
+import type {
+  CleanupCategory,
+  CleanupPreview,
+  CleanupResult,
+  ImageSummary,
+  ImageUpdateStatus,
+} from '@/api/types';
 import { UpdateBadge } from '@/components/domain/badges';
 import { OperationModal } from '@/components/domain/OperationModal';
 import { ScopeNotice } from '@/components/layout/AppShell';
@@ -91,7 +97,10 @@ export default function ImagesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [images.data, filter, search, statusByRef]);
 
-  const check = useAction(() => api.post('/updates/check', {}), { success: 'Registry check finished', invalidate: ['updates'] });
+  const check = useAction(() => api.post('/updates/check', {}), {
+    success: 'Registry check finished',
+    invalidate: ['updates'],
+  });
   const pull = useAction((ref: string) => api.post<{ operationId: string }>('/images/pull', { ref }), {
     quietError: false,
   });
@@ -109,7 +118,9 @@ export default function ImagesPage() {
     used: images.data?.filter((i) => i.inUse).length ?? 0,
     unused: images.data?.filter((i) => !i.inUse).length ?? 0,
     dangling: images.data?.filter((i) => i.tags.length === 0).length ?? 0,
-    updates: (updates.data?.images ?? []).filter((u) => u.state === 'update_available' || u.state === 'update_staged').length,
+    updates: (updates.data?.images ?? []).filter(
+      (u) => u.state === 'update_available' || u.state === 'update_staged',
+    ).length,
   };
 
   const columns: Column<ImageSummary>[] = [
@@ -131,8 +142,19 @@ export default function ImagesPage() {
           <Tag>dangling</Tag>
         ),
     },
-    { key: 'id', header: 'ID', hideOnSmall: true, cell: (i) => <span className="font-mono text-xs text-muted">{i.shortId}</span> },
-    { key: 'size', header: 'Size', align: 'right', sort: (a, b) => a.size - b.size, cell: (i) => bytes(i.size) },
+    {
+      key: 'id',
+      header: 'ID',
+      hideOnSmall: true,
+      cell: (i) => <span className="font-mono text-xs text-muted">{i.shortId}</span>,
+    },
+    {
+      key: 'size',
+      header: 'Size',
+      align: 'right',
+      sort: (a, b) => a.size - b.size,
+      cell: (i) => bytes(i.size),
+    },
     {
       key: 'created',
       header: 'Created',
@@ -180,7 +202,12 @@ export default function ImagesPage() {
       cell: (i) => {
         const s = statusOf(i);
         return s && s.state === 'update_available' ? (
-          <Button size="sm" icon="download" disabledReason={writeBlock} onClick={() => void doPull(s.ref).catch(() => undefined)}>
+          <Button
+            size="sm"
+            icon="download"
+            disabledReason={writeBlock}
+            onClick={() => void doPull(s.ref).catch(() => undefined)}
+          >
             Pull
           </Button>
         ) : null;
@@ -195,7 +222,12 @@ export default function ImagesPage() {
         description="Pulling only downloads and stages an image. Deploying it is a separate, planned step under Maintenance."
         actions={
           <>
-            <Button icon="refresh" loading={check.isPending} disabledReason={writeBlock} onClick={() => check.mutate(undefined)}>
+            <Button
+              icon="refresh"
+              loading={check.isPending}
+              disabledReason={writeBlock}
+              onClick={() => check.mutate(undefined)}
+            >
               Check for updates
             </Button>
             <Button icon="trash" disabledReason={writeBlock} onClick={() => setCleanupOpen(true)}>
@@ -208,7 +240,15 @@ export default function ImagesPage() {
 
       {(staged.data?.staged.length ?? 0) > 0 ? (
         <Card className="mb-4">
-          <CardHeader title="Staged updates" description="Downloaded and ready. Deploy them from Maintenance." actions={<Link to="/maintenance" className="text-sm text-accent hover:underline">Open Maintenance</Link>} />
+          <CardHeader
+            title="Staged updates"
+            description="Downloaded and ready. Deploy them from Maintenance."
+            actions={
+              <Link to="/maintenance" className="text-sm text-accent hover:underline">
+                Open Maintenance
+              </Link>
+            }
+          />
           <CardBody>
             <ul className="divide-y divide-border text-sm">
               {staged.data?.staged.map((s) => (
@@ -233,10 +273,24 @@ export default function ImagesPage() {
               void doPull(pullRef).catch(() => undefined);
             }}
           >
-            <Field label="Pull an image" hint="For example nginx:1.27 or ghcr.io/owner/app:latest" className="min-w-64 flex-1">
-              <Input value={pullRef} onChange={(e) => setPullRef(e.target.value)} placeholder="repository:tag" />
+            <Field
+              label="Pull an image"
+              hint="For example nginx:1.27 or ghcr.io/owner/app:latest"
+              className="min-w-64 flex-1"
+            >
+              <Input
+                value={pullRef}
+                onChange={(e) => setPullRef(e.target.value)}
+                placeholder="repository:tag"
+              />
             </Field>
-            <Button type="submit" icon="download" variant="primary" loading={pull.isPending} disabledReason={writeBlock ?? (pullRef.trim() ? null : 'Enter an image reference first.')}>
+            <Button
+              type="submit"
+              icon="download"
+              variant="primary"
+              loading={pull.isPending}
+              disabledReason={writeBlock ?? (pullRef.trim() ? null : 'Enter an image reference first.')}
+            >
               Pull
             </Button>
           </form>
@@ -245,7 +299,12 @@ export default function ImagesPage() {
 
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
-          <SearchInput value={search} onChange={setSearch} placeholder="Search tag or ID…" label="Search images" />
+          <SearchInput
+            value={search}
+            onChange={setSearch}
+            placeholder="Search tag or ID…"
+            label="Search images"
+          />
           <Segmented
             label="Filter images"
             value={filter}
@@ -262,7 +321,11 @@ export default function ImagesPage() {
         {images.isLoading ? (
           <LoadingState rows={5} />
         ) : images.error ? (
-          <ErrorState error={images.error} onRetry={() => void images.refetch()} title="Could not load images" />
+          <ErrorState
+            error={images.error}
+            onRetry={() => void images.refetch()}
+            title="Could not load images"
+          />
         ) : (
           <DataTable
             caption="Images"
@@ -302,7 +365,12 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
     setResult(null);
     try {
       const categories = (Object.keys(cats) as CleanupCategory[]).filter((c) => cats[c]);
-      setPreview(await api.post<CleanupPreview>('/images/cleanup/preview', { categories, minAgeHours: Number(minAge) || 0 }));
+      setPreview(
+        await api.post<CleanupPreview>('/images/cleanup/preview', {
+          categories,
+          minAgeHours: Number(minAge) || 0,
+        }),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Preview failed');
     } finally {
@@ -312,7 +380,10 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
 
   const execute = async () => {
     if (!preview) return;
-    const r = await api.post<CleanupResult>('/images/cleanup/execute', { previewId: preview.previewId, confirm: preview.previewId });
+    const r = await api.post<CleanupResult>('/images/cleanup/execute', {
+      previewId: preview.previewId,
+      confirm: preview.previewId,
+    });
     setResult(r);
     setPreview(null);
     onDone();
@@ -332,11 +403,22 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
         <fieldset className="space-y-2">
           <legend className="mb-1 text-sm font-medium">What to look for</legend>
           {(Object.keys(CATEGORY_LABEL) as CleanupCategory[]).map((c) => (
-            <Checkbox key={c} checked={cats[c]} onChange={(v) => setCats({ ...cats, [c]: v })} label={CATEGORY_LABEL[c]} />
+            <Checkbox
+              key={c}
+              checked={cats[c]}
+              onChange={(v) => setCats({ ...cats, [c]: v })}
+              label={CATEGORY_LABEL[c]}
+            />
           ))}
         </fieldset>
         <Field label="Minimum age (hours)" hint="Items newer than this are kept.">
-          <Input type="number" min={0} value={minAge} onChange={(e) => setMinAge(e.target.value)} className="max-w-32" />
+          <Input
+            type="number"
+            min={0}
+            value={minAge}
+            onChange={(e) => setMinAge(e.target.value)}
+            className="max-w-32"
+          />
         </Field>
         <Button variant="primary" icon="search" loading={busy} onClick={() => void doPreview()}>
           Preview
@@ -344,16 +426,23 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
         {error ? <Notice tone="critical">{error}</Notice> : null}
         {result ? (
           <Notice tone="healthy" title="Done">
-            Removed {result.removed.length}, skipped {result.skipped.length}. Reclaimed {bytes(result.reclaimedBytes)}.
+            Removed {result.removed.length}, skipped {result.skipped.length}. Reclaimed{' '}
+            {bytes(result.reclaimedBytes)}.
           </Notice>
         ) : null}
         {preview ? (
           <div className="space-y-3">
-            <Notice tone={preview.candidates.length ? 'warning' : 'info'} title={`${preview.candidates.length} item(s), ${bytes(preview.totalBytes)} would be reclaimed`}>
+            <Notice
+              tone={preview.candidates.length ? 'warning' : 'info'}
+              title={`${preview.candidates.length} item(s), ${bytes(preview.totalBytes)} would be reclaimed`}
+            >
               The preview is valid until {dateTime(preview.expiresAt)}. Nothing has been removed yet.
             </Notice>
             {preview.candidates.length ? (
-              <ul aria-label="Cleanup candidates" className="qm-scroll max-h-64 divide-y divide-border overflow-auto rounded-lg border border-border text-sm">
+              <ul
+                aria-label="Cleanup candidates"
+                className="qm-scroll max-h-64 divide-y divide-border overflow-auto rounded-lg border border-border text-sm"
+              >
                 {preview.candidates.map((c) => (
                   <li key={c.id} className="flex items-center justify-between gap-3 px-3 py-2">
                     <span className="min-w-0">
@@ -369,7 +458,9 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
             ) : null}
             {preview.protected.length ? (
               <details className="text-sm">
-                <summary className="cursor-pointer text-muted">{preview.protected.length} protected item(s) will be kept</summary>
+                <summary className="cursor-pointer text-muted">
+                  {preview.protected.length} protected item(s) will be kept
+                </summary>
                 <ul className="mt-2 space-y-1 text-xs">
                   {preview.protected.map((p) => (
                     <li key={p.name + p.category}>
@@ -381,10 +472,16 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
             ) : null}
             {preview.reportOnly.unusedVolumes.length || preview.reportOnly.unusedNetworks.length ? (
               <Notice tone="info" title="Reported only, never removed here">
-                {preview.reportOnly.unusedVolumes.length} unused volume(s) and {preview.reportOnly.unusedNetworks.length} unused network(s) are not touched.
+                {preview.reportOnly.unusedVolumes.length} unused volume(s) and{' '}
+                {preview.reportOnly.unusedNetworks.length} unused network(s) are not touched.
               </Notice>
             ) : null}
-            <Button variant="danger" icon="trash" disabled={!preview.candidates.length} onClick={() => setConfirmOpen(true)}>
+            <Button
+              variant="danger"
+              icon="trash"
+              disabled={!preview.candidates.length}
+              onClick={() => setConfirmOpen(true)}
+            >
               Remove {preview.candidates.length} item(s)…
             </Button>
           </div>

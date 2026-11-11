@@ -63,7 +63,14 @@ function Overview({ i, s }: { i: InspectData; s: ContainerSummary | null }) {
   const st = i.State;
   const started = st.StartedAt && !st.StartedAt.startsWith('0001') ? st.StartedAt : null;
   const lastProbe = st.Health?.Log?.[st.Health.Log.length - 1];
-  const cmd = [...(Array.isArray(i.Config.Entrypoint) ? i.Config.Entrypoint : i.Config.Entrypoint ? [i.Config.Entrypoint] : []), ...(i.Config.Cmd ?? [])].join(' ');
+  const cmd = [
+    ...(Array.isArray(i.Config.Entrypoint)
+      ? i.Config.Entrypoint
+      : i.Config.Entrypoint
+        ? [i.Config.Entrypoint]
+        : []),
+    ...(i.Config.Cmd ?? []),
+  ].join(' ');
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card>
@@ -73,8 +80,18 @@ function Overview({ i, s }: { i: InspectData; s: ContainerSummary | null }) {
             items={[
               ['State', s ? <ContainerStatus c={s} /> : st.Status],
               ['Health', s ? <HealthBadge health={s.health} /> : '–'],
-              ['Started', started ? `${dateTime(started)} (${st.Running ? duration((Date.now() - Date.parse(started)) / 1000) : relativeTime(started)})` : '–'],
-              ['Finished', !st.Running && st.FinishedAt && !st.FinishedAt.startsWith('0001') ? `${dateTime(st.FinishedAt)}, exit code ${st.ExitCode}` : '–'],
+              [
+                'Started',
+                started
+                  ? `${dateTime(started)} (${st.Running ? duration((Date.now() - Date.parse(started)) / 1000) : relativeTime(started)})`
+                  : '–',
+              ],
+              [
+                'Finished',
+                !st.Running && st.FinishedAt && !st.FinishedAt.startsWith('0001')
+                  ? `${dateTime(st.FinishedAt)}, exit code ${st.ExitCode}`
+                  : '–',
+              ],
               ['Restarts', String(i.RestartCount ?? 0)],
               ['Restart policy', i.HostConfig?.RestartPolicy?.Name || 'no'],
               ['OOM killed', st.OOMKilled ? 'yes' : 'no'],
@@ -83,8 +100,12 @@ function Overview({ i, s }: { i: InspectData; s: ContainerSummary | null }) {
           />
           {lastProbe ? (
             <div className="mt-4 rounded-md border border-border bg-surface-2 p-3 text-xs">
-              <div className="mb-1 font-medium">Last health check (exit {lastProbe.ExitCode}, {relativeTime(lastProbe.End)})</div>
-              <pre className="whitespace-pre-wrap break-words font-mono text-muted">{lastProbe.Output.trim().slice(0, 600) || '(no output)'}</pre>
+              <div className="mb-1 font-medium">
+                Last health check (exit {lastProbe.ExitCode}, {relativeTime(lastProbe.End)})
+              </div>
+              <pre className="whitespace-pre-wrap break-words font-mono text-muted">
+                {lastProbe.Output.trim().slice(0, 600) || '(no output)'}
+              </pre>
             </div>
           ) : null}
         </CardBody>
@@ -94,14 +115,52 @@ function Overview({ i, s }: { i: InspectData; s: ContainerSummary | null }) {
         <CardBody>
           <KeyValue
             items={[
-              ['Image', <span key="i" className="font-mono text-xs">{i.Config.Image}</span>],
-              ['Image ID', <span key="id" className="font-mono text-xs">{shortImageId(i.Image)}</span>],
-              ['Container ID', <span key="c" className="font-mono text-xs">{i.Id.slice(0, 12)}</span>],
+              [
+                'Image',
+                <span key="i" className="font-mono text-xs">
+                  {i.Config.Image}
+                </span>,
+              ],
+              [
+                'Image ID',
+                <span key="id" className="font-mono text-xs">
+                  {shortImageId(i.Image)}
+                </span>,
+              ],
+              [
+                'Container ID',
+                <span key="c" className="font-mono text-xs">
+                  {i.Id.slice(0, 12)}
+                </span>,
+              ],
               ['Created', dateTime(i.Created)],
-              ['Command', cmd ? <code key="cmd" className="break-all text-xs">{cmd}</code> : '–'],
+              [
+                'Command',
+                cmd ? (
+                  <code key="cmd" className="break-all text-xs">
+                    {cmd}
+                  </code>
+                ) : (
+                  '–'
+                ),
+              ],
               ['User', i.Config.User || 'image default'],
               ['Working dir', i.Config.WorkingDir || '–'],
-              ['Project', s?.composeProject ? <Link key="p" className="text-accent hover:underline" to={`/compose/${encodeURIComponent(s.composeProject)}`}>{s.composeProject}{s.composeService ? ` / ${s.composeService}` : ''}</Link> : 'standalone'],
+              [
+                'Project',
+                s?.composeProject ? (
+                  <Link
+                    key="p"
+                    className="text-accent hover:underline"
+                    to={`/compose/${encodeURIComponent(s.composeProject)}`}
+                  >
+                    {s.composeProject}
+                    {s.composeService ? ` / ${s.composeService}` : ''}
+                  </Link>
+                ) : (
+                  'standalone'
+                ),
+              ],
               ['Privileged', i.HostConfig?.Privileged ? 'yes' : 'no'],
             ]}
           />
@@ -109,7 +168,10 @@ function Overview({ i, s }: { i: InspectData; s: ContainerSummary | null }) {
       </Card>
       {s?.capability ? (
         <Card className="lg:col-span-2">
-          <CardHeader title="What Quaymaster can do with this container" actions={<CapabilityBadge level={s.capability} />} />
+          <CardHeader
+            title="What Quaymaster can do with this container"
+            actions={<CapabilityBadge level={s.capability} />}
+          />
           <CardBody className="text-sm text-muted">{CAPABILITY_TEXT[s.capability].text}</CardBody>
         </Card>
       ) : null}
@@ -142,13 +204,22 @@ function Resources({ id, limit }: { id: string; limit: number }) {
       const tx = rate(pts, 'netTx');
       const br = rate(pts, 'blkRead');
       const bw = rate(pts, 'blkWrite');
-      return pts.map((p, k) => ({ t: p.t, cpu: p.cpu, mem: p.memUsage, rx: rx[k] ?? 0, tx: tx[k] ?? 0, br: br[k] ?? 0, bw: bw[k] ?? 0 }));
+      return pts.map((p, k) => ({
+        t: p.t,
+        cpu: p.cpu,
+        mem: p.memUsage,
+        rx: rx[k] ?? 0,
+        tx: tx[k] ?? 0,
+        br: br[k] ?? 0,
+        bw: bw[k] ?? 0,
+      }));
     }
     const rows = hist.data?.rollups ?? [];
     return rows.map((r, k) => {
       const prev = rows[k - 1];
       const dt = prev ? (r.minute - prev.minute) * 60 : 0;
-      const f = (a: number, b: number | undefined) => (prev && dt > 0 && b !== undefined && a >= b ? (a - b) / dt : 0);
+      const f = (a: number, b: number | undefined) =>
+        prev && dt > 0 && b !== undefined && a >= b ? (a - b) / dt : 0;
       return {
         t: r.minute * 60_000,
         cpu: r.cpu_avg,
@@ -181,26 +252,67 @@ function Resources({ id, limit }: { id: string; limit: number }) {
       ) : data.length < 2 ? (
         <Card>
           <CardBody>
-            <ChartEmpty>{range === 'live' ? 'Waiting for samples (the container must be running).' : 'No history for this period yet.'}</ChartEmpty>
+            <ChartEmpty>
+              {range === 'live'
+                ? 'Waiting for samples (the container must be running).'
+                : 'No history for this period yet.'}
+            </ChartEmpty>
           </CardBody>
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
           <Card>
             <CardHeader title="CPU" description="Percent of one core" />
-            <CardBody><TimeChart data={data} series={[{ key: 'cpu', label: 'CPU', color: 'accent' }]} format={(v) => `${v.toFixed(1)} %`} ariaLabel="CPU usage" /></CardBody>
+            <CardBody>
+              <TimeChart
+                data={data}
+                series={[{ key: 'cpu', label: 'CPU', color: 'accent' }]}
+                format={(v) => `${v.toFixed(1)} %`}
+                ariaLabel="CPU usage"
+              />
+            </CardBody>
           </Card>
           <Card>
-            <CardHeader title="Memory" description={limit > 0 ? `Limit ${bytes(limit)}` : 'No memory limit set'} />
-            <CardBody><TimeChart data={data} series={[{ key: 'mem', label: 'Memory', color: 'info' }]} format={(v) => bytes(v, 0)} ariaLabel="Memory usage" /></CardBody>
+            <CardHeader
+              title="Memory"
+              description={limit > 0 ? `Limit ${bytes(limit)}` : 'No memory limit set'}
+            />
+            <CardBody>
+              <TimeChart
+                data={data}
+                series={[{ key: 'mem', label: 'Memory', color: 'info' }]}
+                format={(v) => bytes(v, 0)}
+                ariaLabel="Memory usage"
+              />
+            </CardBody>
           </Card>
           <Card>
             <CardHeader title="Network" description="Bytes per second" />
-            <CardBody><TimeChart data={data} series={[{ key: 'rx', label: 'Received', color: 'healthy' }, { key: 'tx', label: 'Sent', color: 'warning' }]} format={(v) => `${bytes(v, 0)}/s`} ariaLabel="Network throughput" /></CardBody>
+            <CardBody>
+              <TimeChart
+                data={data}
+                series={[
+                  { key: 'rx', label: 'Received', color: 'healthy' },
+                  { key: 'tx', label: 'Sent', color: 'warning' },
+                ]}
+                format={(v) => `${bytes(v, 0)}/s`}
+                ariaLabel="Network throughput"
+              />
+            </CardBody>
           </Card>
           <Card>
             <CardHeader title="Disk I/O" description="Bytes per second" />
-            <CardBody><TimeChart data={data} series={[{ key: 'br', label: 'Read', color: 'info' }, { key: 'bw', label: 'Write', color: 'critical' }]} format={(v) => `${bytes(v, 0)}/s`} ariaLabel="Disk throughput" /></CardBody>
+            <CardBody>
+              <TimeChart
+                data={data}
+                series={[
+                  { key: 'br', label: 'Read', color: 'info' },
+                  { key: 'bw', label: 'Write', color: 'critical' },
+                ]}
+                format={(v) => `${bytes(v, 0)}/s`}
+                ariaLabel="Disk throughput"
+              />
+            </CardBody>
           </Card>
         </div>
       )}
@@ -212,14 +324,16 @@ function Config({ i }: { i: InspectData }) {
   const env = [...(i.Config.Env ?? [])].sort();
   const labels = Object.entries(i.Config.Labels ?? {}).sort(([a], [b]) => a.localeCompare(b));
   const ports = Object.entries(i.NetworkSettings?.Ports ?? {}).flatMap(([cp, binds]) =>
-    binds && binds.length ? binds.map((b) => [`${b.HostIp || '0.0.0.0'}:${b.HostPort}`, cp]) : [['not published', cp]],
+    binds && binds.length
+      ? binds.map((b) => [`${b.HostIp || '0.0.0.0'}:${b.HostPort}`, cp])
+      : [['not published', cp]],
   );
   const nets = Object.entries(i.NetworkSettings?.Networks ?? {});
   return (
     <div className="space-y-4">
       <Notice tone="info" title="Secrets are redacted">
-        Values that look like passwords, tokens or keys are replaced by the server before they reach your browser. Quaymaster has
-        no way to reveal them.
+        Values that look like passwords, tokens or keys are replaced by the server before they reach your
+        browser. Quaymaster has no way to reveal them.
       </Notice>
       <Card>
         <CardHeader title="Environment" description={`${env.length} variables`} />
@@ -245,19 +359,45 @@ function Config({ i }: { i: InspectData }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Mounts" />
-          <CardBody><Table head={['Type', 'Source', 'Target', 'Mode']} empty="No mounts." rows={(i.Mounts ?? []).map((m) => [m.Type, m.Name ?? m.Source, m.Destination, m.RW ? 'rw' : 'ro'])} /></CardBody>
+          <CardBody>
+            <Table
+              head={['Type', 'Source', 'Target', 'Mode']}
+              empty="No mounts."
+              rows={(i.Mounts ?? []).map((m) => [
+                m.Type,
+                m.Name ?? m.Source,
+                m.Destination,
+                m.RW ? 'rw' : 'ro',
+              ])}
+            />
+          </CardBody>
         </Card>
         <Card>
           <CardHeader title="Ports" />
-          <CardBody><Table head={['Host', 'Container']} empty="No ports." rows={ports} /></CardBody>
+          <CardBody>
+            <Table head={['Host', 'Container']} empty="No ports." rows={ports} />
+          </CardBody>
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader title="Networks" />
-          <CardBody><Table head={['Network', 'IP address', 'Gateway', 'Aliases']} empty="Not attached to any network." rows={nets.map(([n, v]) => [n, v.IPAddress || '–', v.Gateway || '–', (v.Aliases ?? []).join(', ') || '–'])} /></CardBody>
+          <CardBody>
+            <Table
+              head={['Network', 'IP address', 'Gateway', 'Aliases']}
+              empty="Not attached to any network."
+              rows={nets.map(([n, v]) => [
+                n,
+                v.IPAddress || '–',
+                v.Gateway || '–',
+                (v.Aliases ?? []).join(', ') || '–',
+              ])}
+            />
+          </CardBody>
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader title="Labels" description={`${labels.length} labels`} />
-          <CardBody><Table head={['Key', 'Value']} empty="No labels." rows={labels.map(([k, v]) => [k, v])} /></CardBody>
+          <CardBody>
+            <Table head={['Key', 'Value']} empty="No labels." rows={labels.map(([k, v]) => [k, v])} />
+          </CardBody>
         </Card>
       </div>
     </div>
@@ -275,7 +415,15 @@ export default function ContainerDetail() {
   if (detail.error) {
     const nf = detail.error instanceof ApiError && detail.error.status === 404;
     return nf ? (
-      <EmptyState icon="box" title="Container not found" action={<Link className="text-accent hover:underline" to="/containers">Back to containers</Link>}>
+      <EmptyState
+        icon="box"
+        title="Container not found"
+        action={
+          <Link className="text-accent hover:underline" to="/containers">
+            Back to containers
+          </Link>
+        }
+      >
         “{ref}” does not exist (anymore). It may have been removed or recreated.
       </EmptyState>
     ) : (
@@ -285,7 +433,9 @@ export default function ContainerDetail() {
   const d = detail.data!;
   // the detail endpoint's summary has no capability / restart fields: take them from the list
   const fromList = list.data?.find((c) => c.id === d.inspect.Id);
-  const summary: ContainerSummary | null = d.summary ? { ...d.summary, ...(fromList ? { capability: fromList.capability } : {}) } : null;
+  const summary: ContainerSummary | null = d.summary
+    ? { ...d.summary, ...(fromList ? { capability: fromList.capability } : {}) }
+    : null;
 
   return (
     <>
@@ -321,11 +471,21 @@ export default function ContainerDetail() {
           { key: 'config', label: 'Configuration' },
         ]}
       />
-      <TabPanel id="overview" tab={tab} idPrefix="ctab"><Overview i={d.inspect} s={summary} /></TabPanel>
-      <TabPanel id="resources" tab={tab} idPrefix="ctab"><Resources id={d.inspect.Id} limit={d.inspect.HostConfig?.Memory ?? 0} /></TabPanel>
-      <TabPanel id="logs" tab={tab} idPrefix="ctab"><LogViewer containerRef={d.inspect.Id} name={d.inspect.Name.replace(/^\//, '')} /></TabPanel>
-      <TabPanel id="config" tab={tab} idPrefix="ctab"><Config i={d.inspect} /></TabPanel>
-      <p className="mt-6 text-xs text-muted"><Tag>{d.inspect.Id.slice(0, 12)}</Tag></p>
+      <TabPanel id="overview" tab={tab} idPrefix="ctab">
+        <Overview i={d.inspect} s={summary} />
+      </TabPanel>
+      <TabPanel id="resources" tab={tab} idPrefix="ctab">
+        <Resources id={d.inspect.Id} limit={d.inspect.HostConfig?.Memory ?? 0} />
+      </TabPanel>
+      <TabPanel id="logs" tab={tab} idPrefix="ctab">
+        <LogViewer containerRef={d.inspect.Id} name={d.inspect.Name.replace(/^\//, '')} />
+      </TabPanel>
+      <TabPanel id="config" tab={tab} idPrefix="ctab">
+        <Config i={d.inspect} />
+      </TabPanel>
+      <p className="mt-6 text-xs text-muted">
+        <Tag>{d.inspect.Id.slice(0, 12)}</Tag>
+      </p>
     </>
   );
 }

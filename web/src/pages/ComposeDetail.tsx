@@ -34,13 +34,50 @@ import { useGate } from '@/state/auth';
 
 type PendingAction = { action: ComposeAction; service?: string; forceRecreate?: boolean } | null;
 
-const COPY: Record<ComposeAction, { title: string; label: string; danger: boolean; impact: (t: string) => string }> = {
-  up: { title: 'Apply (up)', label: 'Run up', danger: false, impact: (t) => `docker compose up -d runs for ${t}: missing containers are created, changed ones are recreated.` },
-  start: { title: 'Start', label: 'Start', danger: false, impact: (t) => `Existing stopped containers of ${t} are started.` },
-  stop: { title: 'Stop', label: 'Stop', danger: true, impact: (t) => `${t} is stopped. Anything that depends on it will stop working until it is started again.` },
-  restart: { title: 'Restart', label: 'Restart', danger: true, impact: (t) => `${t} is restarted. Expect a short interruption.` },
-  down: { title: 'Take down', label: 'Take down', danger: true, impact: (t) => `Containers and networks of ${t} are removed. Volumes are kept. The project is unavailable until it is brought up again.` },
-  redeploy: { title: 'Redeploy', label: 'Redeploy', danger: true, impact: (t) => `${t} is recreated from the current Compose files. Container IDs change; data outside volumes is lost.` },
+const COPY: Record<
+  ComposeAction,
+  { title: string; label: string; danger: boolean; impact: (t: string) => string }
+> = {
+  up: {
+    title: 'Apply (up)',
+    label: 'Run up',
+    danger: false,
+    impact: (t) =>
+      `docker compose up -d runs for ${t}: missing containers are created, changed ones are recreated.`,
+  },
+  start: {
+    title: 'Start',
+    label: 'Start',
+    danger: false,
+    impact: (t) => `Existing stopped containers of ${t} are started.`,
+  },
+  stop: {
+    title: 'Stop',
+    label: 'Stop',
+    danger: true,
+    impact: (t) =>
+      `${t} is stopped. Anything that depends on it will stop working until it is started again.`,
+  },
+  restart: {
+    title: 'Restart',
+    label: 'Restart',
+    danger: true,
+    impact: (t) => `${t} is restarted. Expect a short interruption.`,
+  },
+  down: {
+    title: 'Take down',
+    label: 'Take down',
+    danger: true,
+    impact: (t) =>
+      `Containers and networks of ${t} are removed. Volumes are kept. The project is unavailable until it is brought up again.`,
+  },
+  redeploy: {
+    title: 'Redeploy',
+    label: 'Redeploy',
+    danger: true,
+    impact: (t) =>
+      `${t} is recreated from the current Compose files. Container IDs change; data outside volumes is lost.`,
+  },
 };
 
 export default function ComposeDetailPage() {
@@ -62,15 +99,27 @@ export default function ComposeDetailPage() {
 
   if (detail.isLoading) return <LoadingState rows={5} />;
   if (detail.error || !detail.data)
-    return <ErrorState error={detail.error ?? new Error('Project not found')} onRetry={() => void detail.refetch()} title="Could not load this project" />;
+    return (
+      <ErrorState
+        error={detail.error ?? new Error('Project not found')}
+        onRetry={() => void detail.refetch()}
+        title="Could not load this project"
+      />
+    );
 
   const { summary, services, graph } = detail.data;
   const level = summary.level;
   const base = gate({ mutable: summary.mutable, protectedReason: summary.protectedReason, level });
-  const full = gate({ mutable: summary.mutable, protectedReason: summary.protectedReason, level, needsFull: true });
+  const full = gate({
+    mutable: summary.mutable,
+    protectedReason: summary.protectedReason,
+    level,
+    needsFull: true,
+  });
   const reasonFor = (a: ComposeAction) => (a === 'start' || a === 'stop' || a === 'restart' ? base : full);
   const target = (p: NonNullable<PendingAction>) => (p.service ? `${name} / ${p.service}` : name);
-  const needsName = (p: NonNullable<PendingAction>) => !p.service && (p.action === 'down' || (p.action === 'redeploy' && p.forceRecreate));
+  const needsName = (p: NonNullable<PendingAction>) =>
+    !p.service && (p.action === 'down' || (p.action === 'redeploy' && p.forceRecreate));
 
   const close = () => {
     setPending(null);
@@ -88,25 +137,44 @@ export default function ComposeDetailPage() {
     if (applyDrift) body.applyDrift = true;
     if (confirmNs) body.confirmNamespaceProvider = true;
     try {
-      const r = await api.post<{ operationId: string }>(`/compose/projects/${encodeURIComponent(name)}/actions/${pending.action}`, body);
+      const r = await api.post<{ operationId: string }>(
+        `/compose/projects/${encodeURIComponent(name)}/actions/${pending.action}`,
+        body,
+      );
       invalidate();
       toast.info(`${COPY[pending.action].title} started`, target(pending));
       setOp({ id: r.operationId, title: `${COPY[pending.action].title}: ${target(pending)}` });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'blocked_drift') setNeeds((n) => ({ ...n, drift: true }));
-      if (e instanceof ApiError && (e.details as { field?: string } | undefined)?.field === 'confirmNamespaceProvider') setNeeds((n) => ({ ...n, ns: true }));
+      if (
+        e instanceof ApiError &&
+        (e.details as { field?: string } | undefined)?.field === 'confirmNamespaceProvider'
+      )
+        setNeeds((n) => ({ ...n, ns: true }));
       throw e;
     }
   };
 
   const serviceColumns: Column<ComposeServiceInfo>[] = [
-    { key: 'name', header: 'Service', sort: (a, b) => a.name.localeCompare(b.name), cell: (s) => <span className="font-medium">{s.name}</span> },
-    { key: 'status', header: 'Status', sort: (a, b) => a.status.localeCompare(b.status), cell: (s) => <ServiceStatus status={s.status} /> },
+    {
+      key: 'name',
+      header: 'Service',
+      sort: (a, b) => a.name.localeCompare(b.name),
+      cell: (s) => <span className="font-medium">{s.name}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sort: (a, b) => a.status.localeCompare(b.status),
+      cell: (s) => <ServiceStatus status={s.status} />,
+    },
     {
       key: 'image',
       header: 'Image',
       hideOnSmall: true,
-      cell: (s) => <span className="block max-w-80 truncate font-mono text-xs text-muted">{s.image ?? '–'}</span>,
+      cell: (s) => (
+        <span className="block max-w-80 truncate font-mono text-xs text-muted">{s.image ?? '–'}</span>
+      ),
     },
     {
       key: 'containers',
@@ -132,11 +200,22 @@ export default function ComposeDetailPage() {
       cell: (s) => (
         <span className="inline-flex gap-1">
           {(['restart', 'stop', 'start'] as const).map((a) => (
-            <Button key={a} size="sm" variant="ghost" disabledReason={base} onClick={() => setPending({ action: a, service: s.name })}>
+            <Button
+              key={a}
+              size="sm"
+              variant="ghost"
+              disabledReason={base}
+              onClick={() => setPending({ action: a, service: s.name })}
+            >
               {COPY[a].label}
             </Button>
           ))}
-          <Button size="sm" variant="ghost" disabledReason={full} onClick={() => setPending({ action: 'up', service: s.name })}>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabledReason={full}
+            onClick={() => setPending({ action: 'up', service: s.name })}
+          >
             Recreate
           </Button>
         </span>
@@ -144,7 +223,10 @@ export default function ComposeDetailPage() {
     },
   ];
 
-  const projectActions: { a: ComposeAction; icon: 'play' | 'stop' | 'refresh' | 'trash' | 'upload' | 'undo' }[] = [
+  const projectActions: {
+    a: ComposeAction;
+    icon: 'play' | 'stop' | 'refresh' | 'trash' | 'upload' | 'undo';
+  }[] = [
     { a: 'start', icon: 'play' },
     { a: 'stop', icon: 'stop' },
     { a: 'restart', icon: 'refresh' },
@@ -171,7 +253,14 @@ export default function ComposeDetailPage() {
         actions={
           <div className="flex flex-wrap gap-1.5">
             {projectActions.map(({ a, icon }) => (
-              <Button key={a} size="sm" icon={icon} variant={a === 'down' ? 'danger' : 'secondary'} disabledReason={reasonFor(a)} onClick={() => setPending({ action: a })}>
+              <Button
+                key={a}
+                size="sm"
+                icon={icon}
+                variant={a === 'down' ? 'danger' : 'secondary'}
+                disabledReason={reasonFor(a)}
+                onClick={() => setPending({ action: a })}
+              >
                 {a === 'up' ? 'Apply (up)' : COPY[a].label}
               </Button>
             ))}
@@ -179,7 +268,11 @@ export default function ComposeDetailPage() {
         }
       />
       <ScopeNotice />
-      <Notice tone={level === 'full' ? 'info' : 'warning'} title={CAPABILITY_TEXT[level].label} className="mb-4">
+      <Notice
+        tone={level === 'full' ? 'info' : 'warning'}
+        title={CAPABILITY_TEXT[level].label}
+        className="mb-4"
+      >
         {CAPABILITY_TEXT[level].text}
       </Notice>
       <Tabs
@@ -195,7 +288,14 @@ export default function ComposeDetailPage() {
       />
       <TabPanel id="services" tab={tab}>
         <Card>
-          <DataTable caption="Services" rows={services} rowKey={(s) => s.name} columns={serviceColumns} initialSort={{ key: 'name', dir: 'asc' }} empty={{ title: 'No services', icon: 'layers' }} />
+          <DataTable
+            caption="Services"
+            rows={services}
+            rowKey={(s) => s.name}
+            columns={serviceColumns}
+            initialSort={{ key: 'name', dir: 'asc' }}
+            empty={{ title: 'No services', icon: 'layers' }}
+          />
         </Card>
         <Card className="mt-4">
           <CardHeader title="Details" />
@@ -204,7 +304,10 @@ export default function ComposeDetailPage() {
               items={[
                 ['Compose versions', summary.composeVersions.join(', ') || '–'],
                 ['Services', String(services.length)],
-                ['Start order', graph.order.join(' → ') || (graph.cycle ? `cycle: ${graph.cycle.join(' → ')}` : '–')],
+                [
+                  'Start order',
+                  graph.order.join(' → ') || (graph.cycle ? `cycle: ${graph.cycle.join(' → ')}` : '–'),
+                ],
               ]}
             />
           </CardBody>
@@ -212,10 +315,16 @@ export default function ComposeDetailPage() {
       </TabPanel>
       <TabPanel id="graph" tab={tab}>
         <Card>
-          <CardHeader title="Dependencies" description="Arrows point from a service to what it needs. Dependencies start first." />
+          <CardHeader
+            title="Dependencies"
+            description="Arrows point from a service to what it needs. Dependencies start first."
+          />
           <CardBody>
             {graph.nodes.length ? (
-              <DependencyGraphView graph={graph} statusOf={(s) => services.find((x) => x.name === s)?.status} />
+              <DependencyGraphView
+                graph={graph}
+                statusOf={(s) => services.find((x) => x.name === s)?.status}
+              />
             ) : (
               <EmptyState icon="link" title="No dependencies">
                 None of the services declare depends_on or a shared network or volumes.
@@ -226,7 +335,10 @@ export default function ComposeDetailPage() {
       </TabPanel>
       <TabPanel id="config" tab={tab}>
         <Card>
-          <CardHeader title="Resolved configuration" description="Secrets are replaced by redaction markers by the server." />
+          <CardHeader
+            title="Resolved configuration"
+            description="Secrets are replaced by redaction markers by the server."
+          />
           <CardBody>
             {level !== 'full' ? (
               <EmptyState icon="lock" title="Not available">
@@ -235,7 +347,11 @@ export default function ComposeDetailPage() {
             ) : config.isLoading ? (
               <LoadingState />
             ) : config.error ? (
-              <ErrorState error={config.error} onRetry={() => void config.refetch()} title="Could not read the configuration" />
+              <ErrorState
+                error={config.error}
+                onRetry={() => void config.refetch()}
+                title="Could not read the configuration"
+              />
             ) : (
               <>
                 {config.data?.warnings.map((w) => (
@@ -255,7 +371,13 @@ export default function ComposeDetailPage() {
             title="Validation"
             description="Runs docker compose config --quiet. Unset variables count as errors."
             actions={
-              <Button size="sm" icon="check" disabledReason={level !== 'full' ? 'Only available with full control.' : null} loading={validate.isFetching} onClick={() => (validateOn ? void validate.refetch() : setValidateOn(true))}>
+              <Button
+                size="sm"
+                icon="check"
+                disabledReason={level !== 'full' ? 'Only available with full control.' : null}
+                loading={validate.isFetching}
+                onClick={() => (validateOn ? void validate.refetch() : setValidateOn(true))}
+              >
                 Validate now
               </Button>
             }
@@ -267,7 +389,10 @@ export default function ComposeDetailPage() {
               <ErrorState error={validate.error} title="Validation could not run" />
             ) : validate.data ? (
               <div className="space-y-2">
-                <Notice tone={validate.data.valid ? 'healthy' : 'critical'} title={validate.data.valid ? 'The project is valid' : 'The project has errors'}>
+                <Notice
+                  tone={validate.data.valid ? 'healthy' : 'critical'}
+                  title={validate.data.valid ? 'The project is valid' : 'The project has errors'}
+                >
                   {validate.data.valid ? 'Compose accepts the configuration.' : 'Fix these before deploying.'}
                 </Notice>
                 {validate.data.errors.map((e) => (
@@ -300,18 +425,33 @@ export default function ComposeDetailPage() {
         >
           {pending.action === 'redeploy' ? (
             <div className="mt-3">
-              <Checkbox checked={!!pending.forceRecreate} onChange={(v) => setPending({ ...pending, forceRecreate: v })} label="Force recreate all containers (needs the project name typed)" />
+              <Checkbox
+                checked={!!pending.forceRecreate}
+                onChange={(v) => setPending({ ...pending, forceRecreate: v })}
+                label="Force recreate all containers (needs the project name typed)"
+              />
             </div>
           ) : null}
           {needs.drift ? (
             <Notice tone="warning" title="Configuration drift" className="mt-3">
-              <div className="mb-2">The running containers no longer match the Compose files. Applying changes more than the image. Tick to apply anyway, then confirm again.</div>
-              <Checkbox checked={applyDrift} onChange={setApplyDrift} label="Apply the drifted configuration" />
+              <div className="mb-2">
+                The running containers no longer match the Compose files. Applying changes more than the
+                image. Tick to apply anyway, then confirm again.
+              </div>
+              <Checkbox
+                checked={applyDrift}
+                onChange={setApplyDrift}
+                label="Apply the drifted configuration"
+              />
             </Notice>
           ) : null}
           {needs.ns ? (
             <Notice tone="warning" title="Other services share this one" className="mt-3">
-              <Checkbox checked={confirmNs} onChange={setConfirmNs} label="I understand, recreate the dependents too" />
+              <Checkbox
+                checked={confirmNs}
+                onChange={setConfirmNs}
+                label="I understand, recreate the dependents too"
+              />
             </Notice>
           ) : null}
         </ConfirmDialog>
