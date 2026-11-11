@@ -410,10 +410,7 @@ export class MaintenanceService {
         });
       return this.getRun(id);
     }
-    const unattended =
-      !manual &&
-      sched!.unattended &&
-      plan.services.filter((s) => s.role === 'update').every((s) => s.unattended.eligible);
+    const unattended = !manual && sched!.unattended && plan.services.every((s) => s.unattended.eligible);
     this.d.runs.create({
       ...common,
       status: 'awaiting_approval',

@@ -436,7 +436,12 @@ export class Planner {
       const quarantined =
         !!cand?.status.remoteDigest &&
         this.d.quarantine.isQuarantined(cacheKeyOf(f.cfg.image ?? ''), cand.status.remoteDigest);
-      const blockers = unattendedBlockers(policy, req.scheduleMode ?? null);
+      // F-07 (RT-11/23): a namespace dependent is recreated too, so its own `critical` / `require_approval`
+      // flags count; its update_mode is irrelevant (it is not being updated, only recreated with its provider)
+      const blockers = unattendedBlockers(
+        cand ? policy : { ...policy, updateMode: 'auto' },
+        req.scheduleMode ?? null,
+      );
       if (quarantined) blockers.push('this digest failed before and is quarantined (RT-22)');
       if (!wasRunning) blockers.push('the service is currently stopped');
       services.push({
