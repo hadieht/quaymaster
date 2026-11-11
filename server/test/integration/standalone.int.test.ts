@@ -1,15 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startApp, waitFor, waitOperation, type TestApp } from '../helpers/app.js';
-import {
-  IMG,
-  docker,
-  publish,
-  registryDown,
-  registryUp,
-  updDown,
-  updUp,
-  versionOf,
-} from '../helpers/updates.js';
+import { IMG, docker, publish, registryDown, registryUp, updDown, versionOf } from '../helpers/updates.js';
 
 /**
  * Standalone container update by config clone (RT-12) against the real daemon and the fixture registry.

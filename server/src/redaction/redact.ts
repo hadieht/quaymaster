@@ -424,6 +424,7 @@ function walk(
         typeof val === 'string' &&
         !childForce &&
         !isSecretKey(k) &&
+        !SAFE_KEY_RE.test(k) &&
         looksLikeSecretValue(val)
       ) {
         opts.sink?.(val);
