@@ -33,8 +33,11 @@ export function registerContainerRoutes(app: FastifyInstance, ctx: AppContext): 
   app.get('/containers', async (): Promise<ContainerSummary[]> => {
     const [list, projects] = await Promise.all([ctx.containers.list(), ctx.compose.discover()]);
     const level = new Map(projects.map((p) => [p.name, p.level]));
+    const extras = await ctx.containers.extras(list.map((c) => c.id));
     return list.map((c) => ({
       ...c,
+      restartCount: extras.get(c.id)?.restartCount,
+      startedAt: extras.get(c.id)?.startedAt ?? null,
       capability: c.composeProject ? (level.get(c.composeProject) ?? 'limited') : 'standalone',
     }));
   });

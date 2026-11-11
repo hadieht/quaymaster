@@ -195,6 +195,14 @@ export const q = {
   }),
   users: () => ({ queryKey: ['users'], queryFn: () => api.get<UserInfo[]>('/users') }),
   sessions: () => ({ queryKey: ['sessions'], queryFn: () => api.get<{ sessions: SessionEntry[] }>('/auth/sessions') }),
+  overview: (minutes: number) => ({
+    queryKey: ['overview', minutes],
+    queryFn: () =>
+      api.get<{ points: { t: number; cpu: number; mem: number; netRx: number; netTx: number }[] }>('/stats/overview', {
+        minutes,
+      }),
+    refetchInterval: 30 * SECOND,
+  }),
   cronPreview: (cron: string, timezone: string) => ({
     queryKey: ['cron-preview', cron, timezone],
     queryFn: () => api.get<CronPreview>('/maintenance/cron/preview', { cron, timezone }),

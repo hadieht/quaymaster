@@ -93,6 +93,9 @@ export interface ContainerSummary {
   mutable: boolean;
   /** `standalone` for containers without Compose labels; otherwise the level of their project. */
   capability?: CapabilityLevel;
+  /** From `inspect` (list endpoint only): how often Docker restarted it, and when it last started. */
+  restartCount?: number;
+  startedAt?: string | null;
 }
 
 export type ContainerAction =

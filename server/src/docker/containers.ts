@@ -98,6 +98,43 @@ export class ContainerService {
     return (await this.listRaw()).map((c) => toSummary(c, this.d.guard));
   }
 
+  private extrasCache = new Map<string, { at: number; restartCount: number; startedAt: string | null }>();
+
+  /**
+   * Restart count and start time are only in `inspect`, so they are fetched with a short cache
+   * (the list endpoint is polled by the UI). Failures are skipped: the fields are optional.
+   */
+  async extras(ids: string[]): Promise<Map<string, { restartCount: number; startedAt: string | null }>> {
+    const now = Date.now();
+    const out = new Map<string, { restartCount: number; startedAt: string | null }>();
+    const todo: string[] = [];
+    for (const id of ids) {
+      const hit = this.extrasCache.get(id);
+      if (hit && now - hit.at < 15_000) out.set(id, hit);
+      else todo.push(id);
+    }
+    for (let i = 0; i < todo.length; i += 8) {
+      await Promise.all(
+        todo.slice(i, i + 8).map(async (id) => {
+          try {
+            const r = await this.d.docker.getContainer(id).inspect();
+            const e = {
+              at: now,
+              restartCount: r.RestartCount ?? 0,
+              startedAt: r.State?.StartedAt && !r.State.StartedAt.startsWith('0001') ? r.State.StartedAt : null,
+            };
+            this.extrasCache.set(id, e);
+            out.set(id, e);
+          } catch {
+            this.extrasCache.delete(id);
+          }
+        }),
+      );
+    }
+    for (const id of this.extrasCache.keys()) if (!ids.includes(id)) this.extrasCache.delete(id);
+    return out;
+  }
+
   /** Resolves any user-supplied reference to the full ID via inspect (RT-03: resolve → check → act). */
   async resolve(ref: string): Promise<ResolvedContainer> {
     if (!SAFE_REF_RE.test(ref) || ref.startsWith('-')) throw badRequest('Invalid container reference');
