@@ -15,6 +15,8 @@ export interface OperationContext {
   /** Appends scrubbed output to the operation record and its live stream. */
   log(text: string): void;
   setComposeVersion(v: string): void;
+  /** True once a graceful shutdown started: long runs must not begin new steps (RT-14). */
+  readonly shuttingDown: boolean;
 }
 
 interface Live {
@@ -81,8 +83,12 @@ export class OperationManager {
     live.emitter.setMaxListeners(50);
     this.live.set(id, live);
 
+    const isShuttingDown = (): boolean => this.shuttingDown;
     const ctx: OperationContext = {
       id,
+      get shuttingDown(): boolean {
+        return isShuttingDown();
+      },
       log: (text) => {
         const clean = redactText(globalScrubber.scrub(text));
         if (!clean) return;

@@ -72,6 +72,10 @@ class World {
   deploys: string[] = [];
   pulls: string[] = [];
   pullFails = false;
+  /** Wanted `compose config --hash` per service (default 'h', as in the plans). */
+  hashes = new Map<string, string>();
+  /** Called after a deployServices call (to simulate things happening mid-run). */
+  afterDeploy?: (service: string) => void;
   /** Image IDs whose containers never become healthy. */
   unhealthy = new Set<string>();
   constructor(services: string[]) {
@@ -98,9 +102,12 @@ class World {
           const repoTag = [...this.tags.keys()].find((k) => k.includes(`/${s}:`)) ?? '';
           this.deploys.push(`${s}->${this.tags.get(repoTag)}`);
           this.add(s, this.tags.get(repoTag) ?? IMG_OLD);
+          this.afterDeploy?.(s);
         }
         return { code: 0, timedOut: false, stderrTail: '', argv: ['compose', 'up'] };
       },
+      configHashes: async (_t: unknown, services: string[]) =>
+        new Map(services.map((x) => [x, this.hashes.get(x) ?? 'h'])),
       resolvedConfig: async () => ({ config: {} }),
       invalidate: () => undefined,
       detail: async () => ({ graph: { edges: [] } }),
@@ -189,7 +196,7 @@ describe('RunExecutor state machine (fake Docker)', () => {
       requestedBy: 't',
     });
     runs.approve('r1', 't', p.planHash);
-    const ctx = { id: 'r1', log: () => undefined } as any;
+    const ctx = { id: 'r1', log: () => undefined, shuttingDown: false } as any;
     const exec = () => ex.execute('r1', ctx, () => 'new-request');
     const steps = () => runs.steps('r1').map((s) => `${s.service ?? '-'}:${s.step}:${s.status}`);
     return { exec, runs, rollback, quarantine, notes, audits, steps };
@@ -301,6 +308,142 @@ describe('RunExecutor state machine (fake Docker)', () => {
     expect(world.deploys).toEqual([`db->${IMG_NEW}`]);
     expect(t.runs.get('r1')?.reason).toMatch(/Another tool changed app/);
     expect(t.notes).toContain('run.conflict');
+  });
+});
+
+describe('RunExecutor audit 01b regressions (fake Docker)', () => {
+  let opened: OpenedDb | undefined;
+  afterEach(() => opened?.close());
+  function harness(services: PlanService[], world: World) {
+    opened = openDatabase(':memory:');
+    const db = opened.db;
+    db.prepare(
+      "INSERT INTO operations (id, kind, target, status, actor, started_at) VALUES ('r1','maintenance.update','p','running','t',0)",
+    ).run();
+    const runs = new RunsRepo(db);
+    const p = plan(services);
+    const notes: string[] = [];
+    const ex = new RunExecutor({
+      compose: world.compose(),
+      docker: world.docker(),
+      images: world.images(),
+      updates: { statuses: async () => [] } as any,
+      planner: { planProject: async () => p } as any,
+      runs,
+      windows: new WindowsRepo(db),
+      rollback: new RollbackRepo(db),
+      staged: new StagedRepo(db),
+      quarantine: new QuarantineRepo(db),
+      audit: { record: () => undefined } as any,
+      notify: (e) => void notes.push(`${e.type}`),
+      config: { rollbackRetentionMs: 86_400_000 },
+      clock: new AdjustableClock(),
+      log: { error: () => undefined, warn: () => undefined } as any,
+      health: { pollMs: 1, sleep: async () => undefined },
+    });
+    runs.create({
+      id: 'r1',
+      kind: 'update',
+      trigger: 'manual',
+      target: 'p',
+      status: 'awaiting_approval',
+      plan: p,
+      requestedBy: 't',
+    });
+    runs.approve('r1', 't', p.planHash);
+    const flags = { shuttingDown: false };
+    const ctx = {
+      id: 'r1',
+      log: () => undefined,
+      get shuttingDown() {
+        return flags.shuttingDown;
+      },
+    } as any;
+    return { ex, runs, notes, flags, exec: () => ex.execute('r1', ctx, () => 'new') };
+  }
+
+  it('F-01: a configuration change between two services stops the run before the second recreate', async () => {
+    const world = new World(['db', 'app']);
+    world.afterDeploy = (s) => {
+      if (s === 'db') world.hashes.set('app', 'changed');
+    };
+    const t = harness([svc('db'), svc('app')], world);
+    expect(await t.exec()).toBe('partial');
+    expect(world.deploys).toEqual([`db->${IMG_NEW}`]); // app was never recreated
+    const run = t.runs.get('r1');
+    expect(run?.reason).toMatch(/app: .*configuration changed/);
+    expect(run?.result?.services.map((s) => `${s.service}:${s.outcome}`)).toEqual([
+      'db:updated',
+      'app:skipped',
+    ]);
+    expect(t.notes).toContain('run.failed');
+  });
+
+  it('F-01: drift before the very first service blocks the run, nothing is touched', async () => {
+    const world = new World(['db']);
+    world.hashes.set('db', 'changed');
+    const t = harness([svc('db')], world);
+    expect(await t.exec()).toBe('blocked');
+    expect(world.deploys).toEqual([]);
+  });
+
+  it('F-01: an unverifiable hash fails closed', async () => {
+    const world = new World(['db']);
+    const c = world.compose();
+    c.configHashes = async () => {
+      throw new Error('compose exploded');
+    };
+    world.compose = () => c;
+    const t = harness([svc('db')], world);
+    expect(await t.exec()).toBe('blocked');
+    expect(world.deploys).toEqual([]);
+  });
+
+  it('F-03: once shutdown has begun no further service is started and the run is partial', async () => {
+    const world = new World(['db', 'app', 'worker']);
+    const t = harness([svc('db'), svc('app'), svc('worker')], world);
+    world.afterDeploy = (s) => {
+      if (s === 'db') t.flags.shuttingDown = true; // SIGTERM arrives while db is being updated
+    };
+    expect(await t.exec()).toBe('partial');
+    expect(world.deploys).toEqual([`db->${IMG_NEW}`]);
+    expect(t.runs.get('r1')?.result?.services.map((s) => `${s.service}:${s.outcome}`)).toEqual([
+      'db:updated',
+      'app:skipped',
+      'worker:skipped',
+    ]);
+  });
+
+  it('F-08: a failed update without rollback puts the shared tag back on the previous image', async () => {
+    const world = new World(['db']);
+    world.unhealthy.add(IMG_BAD);
+    const t = harness([svc('db', { autoRollback: false, autoRollbackReason: 'has a volume' })], world);
+    expect(await t.exec()).toBe('failed');
+    expect(world.tags.get('registry.test/db:latest')).toBe(IMG_OLD);
+    expect(t.runs.get('r1')?.reason).toMatch(/was put back/);
+  });
+
+  it('F-02: the deploy intent stays open until the outcome is final (a crash during health is visible)', async () => {
+    const world = new World(['db']);
+    const t = harness([svc('db')], world);
+    t.ex.setStepHook(({ step, phase }) => {
+      if (step === 'health' && phase === 'start') {
+        const e = new Error('crash');
+        e.name = 'SimulatedCrash';
+        throw e;
+      }
+    });
+    await expect(t.exec()).rejects.toThrow('crash');
+    const open = t.runs.openIntents('r1');
+    expect(open.map((i) => `${i.service}:${i.action}`)).toEqual(['db:deploy']);
+    expect(open[0]?.toImage).toBe(IMG_NEW);
+  });
+
+  it('F-02: after a normal outcome no intent is left open', async () => {
+    const world = new World(['db']);
+    const t = harness([svc('db')], world);
+    expect(await t.exec()).toBe('completed');
+    expect(t.runs.openIntents('r1')).toEqual([]);
   });
 });
 

@@ -279,27 +279,50 @@ export class RunExecutor {
 
       // ---- 7-9. deploy → health → confirm/rollback, one service at a time -------------------------
       const pending = new Set(plan.order);
+      const skipRest = (detail: string, stepReason: string): void => {
+        for (const rest of plan.services.filter((x) => pending.has(x.service))) {
+          outcomes.push({ service: rest.service, outcome: 'skipped', detail });
+          this.d.runs.finishStep(this.d.runs.startStep(runId, ++seq, rest.service, 'deploy'), 'skipped', {
+            reason: stepReason,
+          });
+        }
+        pending.clear();
+      };
+      const anyUpdated = (): boolean =>
+        outcomes.some((o) => o.outcome === 'updated' || o.outcome === 'dependent_recreated');
       for (const s of plan.services) {
         // stop conditions are evaluated BEFORE starting a service; health/rollback below never are (RT-09)
+        if (ctx.shuttingDown) {
+          skipRest('Quaymaster is shutting down; the service was not started', 'shutdown');
+          status = anyUpdated() ? 'partial' : 'skipped';
+          reason = 'Quaymaster is shutting down; the remaining services were skipped (nothing was interrupted)';
+          break;
+        }
         if (windowEnd !== null && this.d.clock.now() + s.health.timeoutSeconds * 1000 > windowEnd) {
-          for (const rest of plan.services.filter((x) => pending.has(x.service))) {
-            outcomes.push({
-              service: rest.service,
-              outcome: 'skipped',
-              detail: 'the maintenance window closes before it could finish',
-            });
-            this.d.runs.finishStep(this.d.runs.startStep(runId, ++seq, rest.service, 'deploy'), 'skipped', {
-              reason: 'window closes',
-            });
-          }
-          status = outcomes.some((o) => o.outcome === 'updated' || o.outcome === 'dependent_recreated')
-            ? 'partial'
-            : 'skipped';
+          skipRest('the maintenance window closes before it could finish', 'window closes');
+          status = anyUpdated() ? 'partial' : 'skipped';
           reason = 'The maintenance window closed; the remaining services were skipped';
-          pending.clear();
           break;
         }
         await this.assertNoConflict(plan, [...pending]);
+        // RT-01: the hash gate runs again right before EVERY recreate, not only at preflight
+        const drift = await this.driftBefore(target, s);
+        if (drift) {
+          skipRest(`configuration drift detected during the run (${drift})`, 'drift');
+          status = anyUpdated() ? 'partial' : 'blocked';
+          reason = `${s.service}: ${drift}. The run stopped before recreating it; nothing was rolled back.`;
+          guidance.push(
+            'The Compose configuration changed while the run was in progress. Review the change, then create a new run (with applyDrift to apply it deliberately).',
+          );
+          this.d.notify({
+            type: 'run.failed',
+            severity: 'critical',
+            title: `Maintenance run stopped: ${plan.target}/${s.service} changed during the run`,
+            message: reason,
+            dedupeKey: `drift:${runId}:${s.service}`,
+          });
+          break;
+        }
         pending.delete(s.service);
         const res = await this.deployOne(
           runId,
@@ -317,17 +340,7 @@ export class RunExecutor {
         // failure: stop the rollout, remaining services are skipped
         status = res.outcome === 'rolled_back' ? 'rolled_back' : 'failed';
         reason = res.detail;
-        for (const rest of plan.services.filter((x) => pending.has(x.service))) {
-          outcomes.push({
-            service: rest.service,
-            outcome: 'skipped',
-            detail: `rollout stopped after ${s.service} failed`,
-          });
-          this.d.runs.finishStep(this.d.runs.startStep(runId, ++seq, rest.service, 'deploy'), 'skipped', {
-            reason: `rollout stopped after ${s.service}`,
-          });
-        }
-        pending.clear();
+        skipRest(`rollout stopped after ${s.service} failed`, `rollout stopped after ${s.service}`);
         break;
       }
     } catch (e) {
@@ -446,7 +459,45 @@ export class RunExecutor {
 
   // ---- one service ------------------------------------------------------------------------
 
+  /**
+   * One service: the write-ahead intent is opened before the first side effect and completed only when the
+   * service outcome is final (healthy, rolled back and re-verified, or left as is). A crash anywhere in
+   * between leaves it open, so `recover()` can compare the live state with `fromImage` / `toImage` (RT-14).
+   */
   private async deployOne(
+    runId: string,
+    plan: Plan,
+    s: PlanService,
+    target: { projectName: string; workingDir: string; files: string[] },
+    stagedImageId: string | null,
+    step: <T>(
+      name: string,
+      service: string | null,
+      fn: () => Promise<{ value: T; detail?: unknown; failed?: boolean }>,
+    ) => Promise<T>,
+    log: (t: string) => void,
+    ctx: OperationContext,
+  ): Promise<{ outcome: ServiceOutcome; detail: string; guidance?: string[] }> {
+    const intent = this.d.runs.addIntent({
+      operationId: runId,
+      service: s.service,
+      action: 'deploy',
+      fromImage: s.fromImageId,
+      toImage: s.role === 'update' ? (stagedImageId ?? null) : null,
+      containerIdsBefore: s.containers.map((c) => c.id),
+    });
+    try {
+      const res = await this.deployInner(runId, plan, s, target, stagedImageId, step, log, ctx);
+      this.d.runs.completeIntent(intent);
+      return res;
+    } catch (e) {
+      // a simulated crash must look like a killed process: the intent stays open
+      if (!(e instanceof Error && e.name === 'SimulatedCrash')) this.d.runs.completeIntent(intent);
+      throw e;
+    }
+  }
+
+  private async deployInner(
     runId: string,
     plan: Plan,
     s: PlanService,
@@ -463,7 +514,6 @@ export class RunExecutor {
     const ref = parseImageRef(s.ref);
     const repoTag = ref ? `${engineName(ref)}:${ref.tag ?? 'latest'}` : s.ref;
     const isUpdate = s.role === 'update';
-    const containerIdsBefore = s.containers.map((c) => c.id);
 
     // expected image after deploy
     let expected = s.fromImageId;
@@ -473,14 +523,6 @@ export class RunExecutor {
     }
 
     // ---- 7. deploy (the user-visible tag moves only here, RT-07)
-    const intent = this.d.runs.addIntent({
-      operationId: runId,
-      service: s.service,
-      action: 'deploy',
-      fromImage: s.fromImageId,
-      toImage: isUpdate ? expected : null,
-      containerIdsBefore,
-    });
     const deployRes = await step<{ ok: boolean; why: string }>('deploy', s.service, async () => {
       try {
         if (isUpdate) await this.d.images.tag(expected, repoTag);
@@ -518,7 +560,8 @@ export class RunExecutor {
         };
       }
     });
-    this.d.runs.completeIntent(intent);
+    // the intent stays open through health and rollback: a crash anywhere before the outcome is final must be
+    // reported truthfully by recover() (RT-14)
 
     // ---- 8. health (always completes, regardless of the window)
     let healthy = false;
@@ -591,10 +634,19 @@ export class RunExecutor {
       }
     }
     const manual = this.manualRecovery(target, plan.target, s, repoTag);
+    // RT-07 / F-08: the update did not stick, so the shared tag must not keep pointing at the failing image
+    // (the next `compose up` of any project using it would deploy it again)
+    let tagRestored = false;
+    if (isUpdate && (!s.autoRollback || !deployRes.ok)) {
+      tagRestored = await this.d.images.tag(s.fromImageId, repoTag).then(
+        () => true,
+        () => false,
+      );
+    }
     if (!s.autoRollback || !isUpdate) {
       return {
         outcome: 'failed_left_as_is',
-        detail: `${s.service} failed its health gate (${why}). ${isUpdate ? `Automatic rollback is off for it (${s.autoRollbackReason}); it was left as is.` : 'Left as is.'}`,
+        detail: `${s.service} failed its health gate (${why}). ${isUpdate ? `Automatic rollback is off for it (${s.autoRollbackReason}); it was left as is${tagRestored ? `, but the tag ${repoTag} was put back on the previous image so a later "compose up" does not redeploy the failing one` : ''}.` : 'Left as is.'}`,
         guidance: manual,
       };
     }
@@ -610,6 +662,24 @@ export class RunExecutor {
       detail: `${s.service} failed its health gate (${why}) and the automatic rollback also failed: ${rb.why}`,
       guidance: manual,
     };
+  }
+
+  /**
+   * RT-01: compares the service's current `compose config --hash` with the one the approved plan was made
+   * against. Returns a description when they differ (or cannot be computed — fail closed), else null.
+   */
+  private async driftBefore(
+    target: { projectName: string; workingDir: string; files: string[] },
+    s: PlanService,
+  ): Promise<string | null> {
+    if (!s.configHash) return null;
+    try {
+      const now = (await this.d.compose.configHashes(target, [s.service])).get(s.service);
+      if (!now) return 'its configuration can no longer be resolved';
+      return now === s.configHash ? null : 'its Compose configuration changed after the plan was approved';
+    } catch (e) {
+      return `its configuration hash could not be verified (${(e as Error).message.slice(0, 200)})`;
+    }
   }
 
   /** Re-tags the previous image ID and redeploys; asserts the image and re-runs the health gate. */
