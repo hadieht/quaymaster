@@ -70,6 +70,7 @@ export class ImageOps {
     ref: ImageRef,
     digest: string,
     onProgress?: (p: PullProgress) => void,
+    opts: { stage?: boolean } = {},
   ): Promise<PullResult> {
     const repo = engineName({ registry: ref.registry, repo: ref.repo });
     const auth = this.authFor(ref);
@@ -143,6 +144,8 @@ export class ImageOps {
     const info = await this.inspect(`${repo}@${digest}`);
     if (!info) throw new AppError(502, 'registry_error', 'the pulled image is not present after the pull');
     const tag = stagedTag(ref, digest);
+    // stage:false only refreshes the registry digest record of the image (no alias, no staged row)
+    if (opts.stage === false) return { imageId: info.Id, digest, stagedTag: tag };
     await this.tag(info.Id, tag);
     this.d.staged.put({
       tag,

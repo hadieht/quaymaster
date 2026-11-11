@@ -640,7 +640,9 @@ export class RunExecutor {
         // next check would report "local_only". Re-pulling by digest is a manifest fetch only (layers are present).
         const left = await this.d.images.inspect(stagedImageId ?? s.ref);
         if (left && !(left.RepoDigests ?? []).some((d) => d.endsWith(`@${s.toDigest}`)))
-          await this.d.images.pullByDigest(ref, s.toDigest).catch(() => undefined);
+          await this.d.images
+            .pullByDigest(ref, s.toDigest, undefined, { stage: false })
+            .catch(() => undefined);
       }
       return {
         outcome: isUpdate ? 'updated' : 'dependent_recreated',
