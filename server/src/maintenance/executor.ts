@@ -636,6 +636,11 @@ export class RunExecutor {
       if (isUpdate && ref && s.toDigest) {
         // the user-visible tag now holds the image: the staged alias can go (an untag, never an image delete)
         await this.d.images.remove(stagedTag(ref, s.toDigest)).catch(() => undefined);
+        // some engines drop the registry digest record together with the staged alias; without it the
+        // next check would report "local_only". Re-pulling by digest is a manifest fetch only (layers are present).
+        const left = await this.d.images.inspect(stagedImageId ?? s.ref);
+        if (left && !(left.RepoDigests ?? []).some((d) => d.endsWith(`@${s.toDigest}`)))
+          await this.d.images.pullByDigest(ref, s.toDigest).catch(() => undefined);
       }
       return {
         outcome: isUpdate ? 'updated' : 'dependent_recreated',
