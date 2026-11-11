@@ -126,11 +126,14 @@ export function buildCloneSpec(old: Inspect, oldImage: ImageInspect, newImageRef
   const nets = Object.entries(old.NetworkSettings?.Networks ?? {});
   const shortId = old.Id.slice(0, 12);
   const attach = (name: string, n: Dockerode.NetworkInfo): NetworkAttachment => {
-    const ipam = (n as { IPAMConfig?: { IPv4Address?: string; IPv6Address?: string; LinkLocalIPs?: string[] } })
-      .IPAMConfig;
+    const ipam = (
+      n as { IPAMConfig?: { IPv4Address?: string; IPv6Address?: string; LinkLocalIPs?: string[] } }
+    ).IPAMConfig;
     return {
       network: name,
-      aliases: ((n as { Aliases?: string[] }).Aliases ?? []).filter((a) => a !== shortId && a !== old.Name.slice(1)),
+      aliases: ((n as { Aliases?: string[] }).Aliases ?? []).filter(
+        (a) => a !== shortId && a !== old.Name.slice(1),
+      ),
       ipv4: ipam?.IPv4Address ?? null,
       ipv6: ipam?.IPv6Address ?? null,
       linkLocalIPs: ipam?.LinkLocalIPs ?? [],
@@ -166,5 +169,9 @@ export function buildCloneSpec(old: Inspect, oldImage: ImageInspect, newImageRef
   }
   body['HostConfig'] = host;
   if (extra.length) notes.push(`networks connected before start: ${extra.map((e) => e.network).join(', ')}`);
-  return { body, extraNetworks: extra.filter((e) => e.network !== (builtin ? 'bridge' : primary?.network)), notes };
+  return {
+    body,
+    extraNetworks: extra.filter((e) => e.network !== (builtin ? 'bridge' : primary?.network)),
+    notes,
+  };
 }

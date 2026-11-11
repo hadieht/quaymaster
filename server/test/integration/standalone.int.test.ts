@@ -1,6 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { startApp, waitFor, waitOperation, type TestApp } from '../helpers/app.js';
-import { IMG, docker, publish, registryDown, registryUp, updDown, updUp, versionOf } from '../helpers/updates.js';
+import {
+  IMG,
+  docker,
+  publish,
+  registryDown,
+  registryUp,
+  updDown,
+  updUp,
+  versionOf,
+} from '../helpers/updates.js';
 
 /**
  * Standalone container update by config clone (RT-12) against the real daemon and the fixture registry.
@@ -11,10 +20,21 @@ describe('standalone container update (config clone, real Docker)', { timeout: 2
   const NAME = 'qmtest-sa';
 
   const rmAll = (): void => {
-    const names = docker('ps', '-a', '--filter', `name=${NAME}`, '--filter', 'label=quaymaster.test=true', '--format', '{{.Names}}');
+    const names = docker(
+      'ps',
+      '-a',
+      '--filter',
+      `name=${NAME}`,
+      '--filter',
+      'label=quaymaster.test=true',
+      '--format',
+      '{{.Names}}',
+    );
     for (const n of names.split('\n').filter((x) => x.startsWith('qmtest-sa'))) docker('rm', '-f', '-v', n);
   };
-  const info = (ref: string): { id: string; image: string; running: boolean; env: string[]; mounts: string[]; health: string } => {
+  const info = (
+    ref: string,
+  ): { id: string; image: string; running: boolean; env: string[]; mounts: string[]; health: string } => {
     const o = JSON.parse(docker('inspect', ref)) as {
       Id: string;
       Image: string;
@@ -40,14 +60,40 @@ describe('standalone container update (config clone, real Docker)', { timeout: 2
     docker('pull', '--quiet', IMG('app'));
     rmAll();
     docker(
-      'run', '-d', '--name', NAME, '--label', 'quaymaster.test=true', '--init', '--stop-timeout', '2',
-      '-v', '/data', '-e', 'FOO=bar', '--health-cmd', 'test -f /tmp/ready', '--health-interval', '2s',
-      '--health-retries', '3', '--health-start-period', '1s', '--pull', 'never', IMG('app'),
+      'run',
+      '-d',
+      '--name',
+      NAME,
+      '--label',
+      'quaymaster.test=true',
+      '--init',
+      '--stop-timeout',
+      '2',
+      '-v',
+      '/data',
+      '-e',
+      'FOO=bar',
+      '--health-cmd',
+      'test -f /tmp/ready',
+      '--health-interval',
+      '2s',
+      '--health-retries',
+      '3',
+      '--health-start-period',
+      '1s',
+      '--pull',
+      'never',
+      IMG('app'),
     );
     await waitFor(() => info(NAME).health === 'healthy', 'standalone healthy', 60_000, 500);
     t = await startApp();
     t.ctx.executor.setHealthOptions({ pollMs: 500 });
-    await t.call('PUT', `/api/v1/maintenance/policies/container/${NAME}`, { health: { timeoutSeconds: 25, stabilizationSeconds: 2 } }, t.admin);
+    await t.call(
+      'PUT',
+      `/api/v1/maintenance/policies/container/${NAME}`,
+      { health: { timeoutSeconds: 25, stabilizationSeconds: 2 } },
+      t.admin,
+    );
   }, 240_000);
   afterAll(async () => {
     await t?.close();
@@ -88,16 +134,28 @@ describe('standalone container update (config clone, real Docker)', { timeout: 2
     expect(after.health).toBe('healthy');
     expect(after.env).toContain('FOO=bar');
     // the data volume is the SAME anonymous volume (re-attached by name, RT-12)
-    expect(after.mounts.filter((m) => m.endsWith(':/data'))).toEqual(before.mounts.filter((m) => m.endsWith(':/data')));
+    expect(after.mounts.filter((m) => m.endsWith(':/data'))).toEqual(
+      before.mounts.filter((m) => m.endsWith(':/data')),
+    );
     // the old container is still there, stopped, as a recovery point
     const old = docker('ps', '-a', '--filter', `name=${NAME}-qm-old-`, '--format', '{{.Names}}');
     expect(old).toMatch(/^qmtest-sa-qm-old-\d+$/);
     expect(info(old).running).toBe(false);
     expect(info(old).id).toBe(before.id);
     // never unattended: schedules refuse auto mode for containers
-    const bad = await t.call('POST', '/api/v1/maintenance/schedules', {
-      name: 'x', cron: '0 3 * * *', timezone: 'UTC', jobType: 'update', selector: { container: NAME }, mode: 'auto',
-    }, t.admin);
+    const bad = await t.call(
+      'POST',
+      '/api/v1/maintenance/schedules',
+      {
+        name: 'x',
+        cron: '0 3 * * *',
+        timezone: 'UTC',
+        jobType: 'update',
+        selector: { container: NAME },
+        mode: 'auto',
+      },
+      t.admin,
+    );
     expect(bad.status).toBe(400);
   });
 

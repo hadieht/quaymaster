@@ -79,7 +79,13 @@ export class StandaloneUpdater {
     const img = await this.d.images.inspect(c.raw.Image);
     if (!img) throw new AppError(409, 'conflict', 'The container’s image is no longer in the local store');
     buildCloneSpec(c.raw, img, st.ref); // validates cloneability early (network mode, --rm, ...)
-    return { containerId: c.id, name: c.name, ref: st.ref, toDigest: st.remoteDigest, fromImageId: c.raw.Image };
+    return {
+      containerId: c.id,
+      name: c.name,
+      ref: st.ref,
+      toDigest: st.remoteDigest,
+      fromImageId: c.raw.Image,
+    };
   }
 
   async execute(
@@ -221,21 +227,28 @@ export class StandaloneUpdater {
         outcome: 'success',
       });
       if (c.raw.State.Running) {
-        const hc = (c.raw.Config as { Healthcheck?: { Test?: string[]; Interval?: number; Retries?: number; StartPeriod?: number } })
-          .Healthcheck;
+        const hc = (
+          c.raw.Config as {
+            Healthcheck?: { Test?: string[]; Interval?: number; Retries?: number; StartPeriod?: number };
+          }
+        ).Healthcheck;
         const hasHc = !!hc?.Test && hc.Test[0] !== 'NONE';
         const pol = d.resolver.resolve({ project: null, service: null, container: p.name });
         const hcSeconds = hasHc
           ? ((hc?.StartPeriod ?? 0) + (hc?.Interval ?? 30e9) * (hc?.Retries ?? 3)) / 1e9 + 30
           : 0;
         await step('health', async () => {
-          const r = await waitForHealth({ inspect: (id) => this.inspectLite(id), pollMs: d.health?.pollMs }, [nid], {
-            kind: hasHc ? 'healthcheck' : 'stability',
-            timeoutMs: Math.max(pol.health.timeoutSeconds, hcSeconds) * 1000,
-            stabilizationMs: pol.health.stabilizationSeconds * 1000,
-            probe: pol.health.probe,
-            expectedImageId: staged,
-          });
+          const r = await waitForHealth(
+            { inspect: (id) => this.inspectLite(id), pollMs: d.health?.pollMs },
+            [nid],
+            {
+              kind: hasHc ? 'healthcheck' : 'stability',
+              timeoutMs: Math.max(pol.health.timeoutSeconds, hcSeconds) * 1000,
+              stabilizationMs: pol.health.stabilizationSeconds * 1000,
+              probe: pol.health.probe,
+              expectedImageId: staged,
+            },
+          );
           if (!r.ok) throw new HealthFailure(r.reason);
           return r;
         });
@@ -250,9 +263,9 @@ export class StandaloneUpdater {
       if (newId) {
         const id = newId;
         const undone = await step('rollback', async () => {
-          await withPermit({ containerId: id, action: 'stop' }, () => d.docker.getContainer(id).stop({ t: 5 })).catch(
-            () => undefined,
-          );
+          await withPermit({ containerId: id, action: 'stop' }, () =>
+            d.docker.getContainer(id).stop({ t: 5 }),
+          ).catch(() => undefined);
           if (newRenamed)
             await withPermit({ kind: 'container_rename', containerId: id, newName: tmpName }, () =>
               d.docker.getContainer(id).rename({ name: tmpName }),
@@ -306,7 +319,12 @@ export class StandaloneUpdater {
       outcome: status === 'completed' ? 'success' : 'failure',
     });
     d.notify({
-      type: status === 'completed' ? 'run.succeeded' : status === 'rolled_back' ? 'run.rolled_back' : 'run.failed',
+      type:
+        status === 'completed'
+          ? 'run.succeeded'
+          : status === 'rolled_back'
+            ? 'run.rolled_back'
+            : 'run.failed',
       severity: status === 'completed' ? 'info' : status === 'rolled_back' ? 'warning' : 'critical',
       title: `Container update ${status}: ${p.name}`,
       message: reason ?? status,

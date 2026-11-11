@@ -378,11 +378,12 @@ export class RunExecutor {
     const run = this.d.runs.get(runId);
     if (!run || !run.plan) throw new AppError(404, 'not_found', 'Run has no plan');
     const plan = run.plan;
-    const points = this.d.rollback
-      .forRun(runId)
+    const points = this.d.rollback.forRun(runId);
     const svcOf = (x: { service: string | null }): string => x.service ?? '';
-    if (points.length === 0) throw new AppError(409, 'conflict', 'This run has no recovery points to restore');
-    if (points.length === 0) throw new AppError(409, 'conflict', 'This run has no recovery points to restore');
+    if (points.length === 0)
+      throw new AppError(409, 'conflict', 'This run has no recovery points to restore');
+    if (points.length === 0)
+      throw new AppError(409, 'conflict', 'This run has no recovery points to restore');
     const { target } = await this.d.compose.targetOf(plan.target, true);
     let seq = 20_000;
     const failures: string[] = [];

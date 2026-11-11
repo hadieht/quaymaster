@@ -101,7 +101,14 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     }
     // recovery points were tagged and are kept (rollback protection)
     expect(t.ctx.rollbackRepo.list().length).toBe(3);
-    const rb = docker('image', 'ls', '--format', '{{.Repository}}:{{.Tag}}', '--filter', 'label=quaymaster.test=true');
+    const rb = docker(
+      'image',
+      'ls',
+      '--format',
+      '{{.Repository}}:{{.Tag}}',
+      '--filter',
+      'label=quaymaster.test=true',
+    );
     expect(rb).toMatch(/quaymaster-rollback/);
     // staged aliases are gone after a successful deploy; the next check is clean
     expect((await t.call('GET', '/api/v1/images/staged', undefined, t.admin)).body.staged).toEqual([]);
@@ -109,7 +116,16 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     const states = chk.body.images
       .filter((i: { ref: string }) => i.ref.includes('qmtest-'))
       .map((i: { state: string }) => i.state);
-    expect(states, JSON.stringify(chk.body.images.map((i: { ref: string; state: string; reason?: string }) => [i.ref, i.state, i.reason]))).toEqual(['up_to_date', 'up_to_date', 'up_to_date']);
+    expect(
+      states,
+      JSON.stringify(
+        chk.body.images.map((i: { ref: string; state: string; reason?: string }) => [
+          i.ref,
+          i.state,
+          i.reason,
+        ]),
+      ),
+    ).toEqual(['up_to_date', 'up_to_date', 'up_to_date']);
     // audited
     const audit = await t.call('GET', '/api/v1/audit?action=maintenance.run.finish', undefined, t.admin);
     expect(audit.body.entries.length).toBe(1);
@@ -220,12 +236,7 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     publish('app', 2, 'good');
     const before = snapAll();
     const original = readFileSync(stackFile, 'utf8');
-    const r = await t.call(
-      'POST',
-      '/api/v1/maintenance/runs',
-      { project: PROJECT },
-      t.admin,
-    );
+    const r = await t.call('POST', '/api/v1/maintenance/runs', { project: PROJECT }, t.admin);
     expect(r.status).toBe(201);
     expect(r.body.status).toBe('awaiting_approval');
     try {
@@ -377,10 +388,16 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     expect(snapAll()).toEqual(before);
     // not critical any more (and the open request is rejected so the lock is free): the next tick updates unattended
     await t.call('POST', `/api/v1/maintenance/runs/${runs[0].id}/reject`, undefined, t.admin);
-    await t.call('DELETE', `/api/v1/maintenance/policies/service/${encodeURIComponent(`${PROJECT}/app`)}`, undefined, t.admin);
+    await t.call(
+      'DELETE',
+      `/api/v1/maintenance/policies/service/${encodeURIComponent(`${PROJECT}/app`)}`,
+      undefined,
+      t.admin,
+    );
     t.ctx.clock.advance(61_000);
     await t.ctx.maintenance.tick();
-    const next = (await t.call('GET', '/api/v1/maintenance/runs?status=running', undefined, t.admin)).body.runs;
+    const next = (await t.call('GET', '/api/v1/maintenance/runs?status=running', undefined, t.admin)).body
+      .runs;
     const all = (await t.call('GET', '/api/v1/maintenance/runs', undefined, t.admin)).body.runs;
     const fired = next[0] ?? all.find((r: { status: string }) => r.status !== 'rejected');
     expect(fired).toBeTruthy();
@@ -400,7 +417,12 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     const noConfirm = await t.call('POST', `/api/v1/maintenance/runs/${run.id}/restore`, {}, t.admin);
     expect(noConfirm.status).toBe(409);
     expect(versionOf(snap('app').imageId)).toBe('2-good'); // nothing happened without confirmation
-    const r = await t.call('POST', `/api/v1/maintenance/runs/${run.id}/restore`, { confirm: PROJECT }, t.admin);
+    const r = await t.call(
+      'POST',
+      `/api/v1/maintenance/runs/${run.id}/restore`,
+      { confirm: PROJECT },
+      t.admin,
+    );
     expect(r.status, r.raw).toBe(202);
     const op = await waitFor(
       async () => {
@@ -432,7 +454,8 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     expect(r.status).toBe(202);
     const id = r.body.id as string;
     await waitFor(
-      async () => (await t.call('GET', `/api/v1/operations/${id}`, undefined, t.admin)).body.status !== 'running',
+      async () =>
+        (await t.call('GET', `/api/v1/operations/${id}`, undefined, t.admin)).body.status !== 'running',
       'crash',
       60_000,
       300,
@@ -471,7 +494,11 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     const pv = await t.call(
       'POST',
       '/api/v1/images/cleanup/preview',
-      { categories: ['dangling_images', 'unused_images'], minAgeHours: 0, labelFilter: 'quaymaster.test=true' },
+      {
+        categories: ['dangling_images', 'unused_images'],
+        minAgeHours: 0,
+        labelFilter: 'quaymaster.test=true',
+      },
       t.admin,
     );
     expect(pv.status, pv.raw).toBe(200);
@@ -494,7 +521,8 @@ describe('maintenance runs (real Docker + fixture registry)', { timeout: 240_000
     );
     expect(ex.status, ex.raw).toBe(200);
     // all protected + in-use images still exist
-    for (const id of [...protectedIds, ...inUse]) expect(docker('image', 'inspect', '--format', '{{.Id}}', id)).toBe(id);
+    for (const id of [...protectedIds, ...inUse])
+      expect(docker('image', 'inspect', '--format', '{{.Id}}', id)).toBe(id);
     for (const s of Object.values(snapAll())) expect(s.status).toBe('running');
   });
 });
