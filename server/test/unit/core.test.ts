@@ -140,6 +140,22 @@ describe('guard: read-only, scope, self-protection (RT-03, RT-05)', () => {
       g.projectRefusal('qmtest-x', { volumes: ['qmtest-v'], networks: ['qmtest-n'], containers: [] }),
     ).toBeNull();
   });
+  it('F-05: container update (restart policy) needs its own permit for that exact container', () => {
+    const rw = { readOnlyReason: null };
+    const other = 'c'.repeat(64);
+    const p = { kind: 'container_restart_policy' as const, containerId: ID };
+    expect(() => checkEngineRequest('POST', `/v1.55/containers/${ID}/update`, rw, p)).not.toThrow();
+    expect(() => checkEngineRequest('POST', `/containers/${other}/update`, rw, p)).toThrow(/not authorised/);
+    expect(() => checkEngineRequest('POST', `/containers/${ID}/update`, rw, undefined)).toThrow(
+      /not authorised/,
+    );
+    expect(() =>
+      checkEngineRequest('POST', `/containers/${ID}/update`, rw, { containerId: ID, action: 'stop' }),
+    ).toThrow(/not authorised/);
+    expect(() => checkEngineRequest('POST', `/containers/${ID}/update`, { readOnlyReason: 'ro' }, p)).toThrow(
+      /Read-only/,
+    );
+  });
   it('transport allow-list: reads pass; mutations need read-write, a permit for that exact id and an allow-listed path', () => {
     const rw = { readOnlyReason: null };
     const permit = (action: ContainerPermit['action'], id = ID): ContainerPermit => ({

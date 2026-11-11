@@ -18,15 +18,11 @@ import {
 } from '../helpers/updates.js';
 
 /**
- * Red-team audit 01b (docs/reviews/01b-update-engine-audit.md): FAILING demonstrations.
+ * Red-team audit 01b (docs/reviews/01b-update-engine-audit.md): the demonstrations of F-01..F-06, now REGRESSION tests.
  *
- * Every test asserts the behaviour the specification requires, so each one FAILS against the current
- * implementation; the failure message is the evidence. They are skipped unless QM_AUDIT_DEMOS=1 so the
- * normal suite stays green. Fixtures only: every resource is qmtest-* and labelled quaymaster.test=true.
- *
- *   QM_AUDIT_DEMOS=1 npx vitest run test/integration/audit-01b.int.test.ts
+ * Each test asserts the behaviour the specification requires; they failed before phase 2c.
+ * Fixtures only: every resource is qmtest-* and labelled quaymaster.test=true.
  */
-const ENABLED = process.env['QM_AUDIT_DEMOS'] === '1';
 
 const NS_PROJECT = 'qmtest-audns';
 const NS_DIR = path.join(STACKS_DIR, NS_PROJECT);
@@ -85,7 +81,7 @@ function nsDown(): void {
 const cid = (name: string): string => docker('inspect', '--format', '{{.Id}}', name);
 const tagId = (ref: string): string => docker('image', 'inspect', '--format', '{{.Id}}', ref);
 
-describe.skipIf(!ENABLED)('audit 01b: update engine failure demonstrations', { timeout: 300_000 }, () => {
+describe('audit 01b regressions: update engine (fixtures only)', { timeout: 300_000 }, () => {
   let t: TestApp;
   const extraCleanup: (() => void)[] = [];
 
@@ -165,7 +161,7 @@ describe.skipIf(!ENABLED)('audit 01b: update engine failure demonstrations', { t
       steps: { service: string | null; step: string; status: string }[];
     };
     const env = docker('inspect', '--format', '{{json .Config.Env}}', 'qmtest-upd-worker-1');
-    // eslint-disable-next-line no-console
+     
     console.log('F-01', run.status, run.approvedBy, stepLog(run).join(' '), env);
     expect(
       env,
@@ -218,7 +214,7 @@ describe.skipIf(!ENABLED)('audit 01b: update engine failure demonstrations', { t
         t2.admin,
       );
       const app = snap('app');
-      // eslint-disable-next-line no-console
+       
       console.log(
         'F-02',
         run.body.status,
@@ -266,7 +262,7 @@ describe.skipIf(!ENABLED)('audit 01b: update engine failure demonstrations', { t
     await waitFor(async () => shutdown !== null, 'shutdown triggered', 120_000, 200);
     await shutdown;
     const after = starts.filter((s) => s.at > shutdownAt && s.step === 'deploy').map((s) => s.service);
-    // eslint-disable-next-line no-console
+     
     console.log('F-03 deploy steps started after shutdown began:', after, 'versions:', {
       db: versionOf(snap('db').imageId),
       app: versionOf(snap('app').imageId),
@@ -275,7 +271,7 @@ describe.skipIf(!ENABLED)('audit 01b: update engine failure demonstrations', { t
     expect(after, 'no new service deploy may start once shutdown has begun').toEqual([]);
   });
 
-  it('F-04 (RT-07): "docker compose pull" through the API moves the user-visible, host-global tag', async () => {
+  it('F-04 (RT-07): "docker compose pull" through the API is refused and the user-visible tag does not move', async () => {
     t = await startApp();
     extraCleanup.push(nsDown);
     // a normal project: no pull_policy pin (qmtest-upd pins `never`, which `compose pull` skips)
@@ -295,24 +291,8 @@ services:
       { service: 'web' },
       t.admin,
     );
-    expect(r.status, r.raw).toBe(202);
-    const op = await waitFor(
-      async () => {
-        const o = await t.call('GET', `/api/v1/operations/${r.body.operationId}`, undefined, t.admin);
-        return o.body.status !== 'running' ? o.body : null;
-      },
-      'pull',
-      120_000,
-      500,
-    );
+    expect(r.status, r.raw).toBe(400); // `pull` is no longer an action
     const after = tagId(IMG('worker'));
-    // eslint-disable-next-line no-console
-    console.log(
-      'F-04',
-      op.status,
-      `tag ${IMG('worker')}: ${before.slice(0, 19)} (${versionOf(before)}) -> ${after.slice(0, 19)} (${versionOf(after)})`,
-      `qmtest-upd-worker-1 shares the tag and runs ${versionOf(snap('worker').imageId)}`,
-    );
     expect(after, 'a pull must never move the user-visible tag (RT-07)').toBe(before);
   });
 
@@ -420,7 +400,7 @@ services:
     const staged = (await t.call('GET', '/api/v1/images/staged', undefined, t.admin)).body.staged as {
       ref: string;
     }[];
-    // eslint-disable-next-line no-console
+     
     console.log(
       'F-05',
       `run=${run.status}`,
@@ -460,7 +440,7 @@ services:
       plan: { services: { service: string; role: string; critical: boolean }[] };
     };
     const consumerAfter = cid(`${NS_PROJECT}-consumer-1`);
-    // eslint-disable-next-line no-console
+     
     console.log(
       'F-06',
       run.status,
