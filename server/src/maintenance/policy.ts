@@ -46,6 +46,7 @@ export function resolvePolicy(levels: { level: string; policy: PolicyInput }[]):
   let requireApproval = DEFAULT_POLICY.requireApproval;
   let approvalDemanded = false;
   let autoRollback: boolean | null = null;
+  let autoRollbackBroad = false;
   let updateOrder: number | null = null;
   const health: HealthPolicy = { ...DEFAULT_HEALTH };
 
@@ -69,9 +70,16 @@ export function resolvePolicy(levels: { level: string; policy: PolicyInput }[]):
     if (policy.autoRollback === false) {
       autoRollback = false;
       sources['autoRollback'] = level;
-    } else if (policy.autoRollback === true && autoRollback === null) {
-      autoRollback = true;
-      sources['autoRollback'] = level;
+    } else if (policy.autoRollback === true) {
+      // F-09 (RT-10): only a service/container-level `true` may override the stateful default;
+      // a project/global `true` is a convenience that covers stateless services only
+      if (autoRollback === null && /^(service|container):/.test(level)) {
+        autoRollback = true;
+        sources['autoRollback'] = level;
+      } else if (autoRollback === null) {
+        autoRollbackBroad = true;
+        sources['autoRollbackBroad'] = level;
+      }
     }
     if (policy.updateOrder !== undefined) {
       updateOrder = policy.updateOrder;
@@ -90,6 +98,7 @@ export function resolvePolicy(levels: { level: string; policy: PolicyInput }[]):
     critical,
     requireApproval,
     autoRollbackExplicit: autoRollback,
+    autoRollbackBroad,
     health,
     maxParallel: 1, // v1 updates one service at a time (spec 7.5)
     updateOrder,
@@ -119,9 +128,12 @@ export function unattendedBlockers(
 export function resolveAutoRollback(
   explicit: boolean | null,
   hasPersistentMounts: boolean,
+  broadTrue = false,
 ): { value: boolean; reason: string } {
   if (explicit === false) return { value: false, reason: 'disabled by policy' };
   if (explicit === true) return { value: true, reason: 'enabled by policy' };
+  if (broadTrue && !hasPersistentMounts)
+    return { value: true, reason: 'enabled by the project/global policy (stateless service)' };
   return hasPersistentMounts
     ? {
         value: false,

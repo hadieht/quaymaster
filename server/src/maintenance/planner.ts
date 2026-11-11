@@ -413,7 +413,11 @@ export class Planner {
         readOnly: m.RW === false,
       }));
       const persistent = mounts.filter((m) => !m.readOnly && (m.type === 'volume' || m.type === 'bind'));
-      const rb = resolveAutoRollback(policy.autoRollbackExplicit, persistent.length > 0);
+      const rb = resolveAutoRollback(
+        policy.autoRollbackExplicit,
+        persistent.length > 0,
+        policy.autoRollbackBroad === true,
+      );
       const hc = insp?.Config?.Healthcheck as
         { Test?: string[]; Interval?: number; Retries?: number; StartPeriod?: number } | undefined;
       const hasHealthcheck = !!hc?.Test && hc.Test[0] !== 'NONE';

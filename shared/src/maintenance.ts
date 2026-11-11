@@ -72,6 +72,8 @@ export interface EffectivePolicy {
   requireApproval: boolean;
   /** Explicit setting after AND-combining the levels; null = nobody set it (the default depends on mounts, RT-10). */
   autoRollbackExplicit: boolean | null;
+  /** `true` was set at project/global level: it applies to stateless services only (RT-10). */
+  autoRollbackBroad?: boolean;
   health: HealthPolicy;
   maxParallel: number;
   updateOrder: number | null;

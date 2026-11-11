@@ -148,6 +148,30 @@ describe('policy resolution (RT-23)', () => {
     expect(p.requireApproval).toBe(true);
     expect(p.autoRollbackExplicit).toBe(false);
   });
+  it('F-09: a project/global autoRollback=true covers stateless services only; service level may override', () => {
+    const broad = resolvePolicy([
+      { level: 'global:*', policy: { autoRollback: true } },
+      { level: 'project:x', policy: { autoRollback: true } },
+    ]);
+    expect(broad.autoRollbackExplicit).toBeNull();
+    expect(broad.autoRollbackBroad).toBe(true);
+    expect(resolveAutoRollback(broad.autoRollbackExplicit, true, broad.autoRollbackBroad).value).toBe(false);
+    expect(resolveAutoRollback(broad.autoRollbackExplicit, false, broad.autoRollbackBroad).value).toBe(true);
+    const specific = resolvePolicy([
+      { level: 'project:x', policy: { autoRollback: true } },
+      { level: 'service:x/db', policy: { autoRollback: true } },
+    ]);
+    expect(specific.autoRollbackExplicit).toBe(true);
+    expect(resolveAutoRollback(specific.autoRollbackExplicit, true, specific.autoRollbackBroad).value).toBe(
+      true,
+    );
+    // an explicit false anywhere still wins
+    const off = resolvePolicy([
+      { level: 'project:x', policy: { autoRollback: false } },
+      { level: 'service:x/db', policy: { autoRollback: true } },
+    ]);
+    expect(off.autoRollbackExplicit).toBe(false);
+  });
   it('unattended truth table', () => {
     expect(
       unattendedBlockers({ updateMode: 'auto', critical: false, requireApproval: false }, 'auto'),
