@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { q } from '@/api/hooks';
-import type { Plan, RunInfo } from '@/api/types';
+import type { Plan, RunDetail, RunInfo } from '@/api/types';
 import { PlanView } from '@/components/domain/PlanView';
 import { Button, Card, CardBody, Checkbox, ConfirmDialog, Field, Notice, Select } from '@/components/ui';
 import { useGate } from '@/state/auth';
@@ -31,12 +31,13 @@ export function PlanPanel() {
     setError(null);
     setPlan(null);
     try {
-      setPlan(
-        await api.post<Plan>('/maintenance/plan', {
-          project,
-          ...(picked.length ? { services: picked } : {}),
-        }),
-      );
+      // the server stores the dry run as a run record; its `plan` is what we show
+      const r = await api.post<RunDetail>('/maintenance/plan', {
+        project,
+        ...(picked.length ? { services: picked } : {}),
+      });
+      if (r.plan) setPlan(r.plan);
+      else setError(r.reason ?? 'No plan could be created for this project.');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The plan could not be created');
     } finally {
