@@ -164,8 +164,6 @@ describe('guard: read-only, scope, self-protection (RT-03, RT-05)', () => {
       /allow-list/,
     ); // names are refused: full IDs only
     for (const p of [
-      '/containers/create',
-      '/images/create?fromImage=x',
       '/containers/prune',
       `/containers/${ID}/exec`,
       '/volumes/prune',
@@ -174,6 +172,52 @@ describe('guard: read-only, scope, self-protection (RT-03, RT-05)', () => {
     ]) {
       expect(() => checkEngineRequest('POST', p, rw, permit('stop'))).toThrow(/allow-list/);
     }
+    // phase 2 operations exist, but only with a permit naming exactly that target
+    for (const p of ['/containers/create?name=x', '/images/create?fromImage=x&tag=y']) {
+      expect(() => checkEngineRequest('POST', p, rw, permit('stop'))).toThrow(/not authorised/);
+    }
+    expect(() =>
+      checkEngineRequest('POST', '/images/create?fromImage=repo&tag=sha256%3Aabc', rw, {
+        kind: 'image_pull',
+        repo: 'repo',
+        tag: 'sha256:abc',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      checkEngineRequest('POST', '/images/create?fromImage=other&tag=sha256%3Aabc', rw, {
+        kind: 'image_pull',
+        repo: 'repo',
+        tag: 'sha256:abc',
+      }),
+    ).toThrow(/not authorised/);
+    expect(() =>
+      checkEngineRequest('DELETE', '/images/repo%3Atag?force=true', rw, {
+        kind: 'image_remove',
+        name: 'repo:tag',
+      }),
+    ).toThrow(/not authorised/); // image removal is never forced
+    expect(() =>
+      checkEngineRequest('DELETE', '/images/repo%3Atag?force=false', rw, {
+        kind: 'image_remove',
+        name: 'repo:tag',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      checkEngineRequest('POST', '/images/sha256:1/tag?repo=a&tag=b', rw, {
+        kind: 'image_tag',
+        imageId: 'sha256:1',
+        repo: 'a',
+        tag: 'b',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      checkEngineRequest('POST', '/images/sha256:1/tag?repo=a&tag=OTHER', rw, {
+        kind: 'image_tag',
+        imageId: 'sha256:1',
+        repo: 'a',
+        tag: 'b',
+      }),
+    ).toThrow(/not authorised/);
     expect(() => checkEngineRequest('DELETE', '/images/x', rw, permit('remove'))).toThrow(/allow-list/);
     expect(() =>
       checkEngineRequest('POST', `/containers/${ID}/stop`, { readOnlyReason: 'ro' }, permit('stop')),

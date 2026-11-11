@@ -82,6 +82,14 @@ const NO_OP_ACTOR = { name: 'system', ip: null as string | null };
 export class RunExecutor {
   constructor(private readonly d: ExecutorDeps) {}
 
+  /** Test seam (see `ExecutorDeps.onStep`). */
+  setStepHook(fn: ExecutorDeps['onStep']): void {
+    this.d.onStep = fn;
+  }
+  setHealthOptions(h: ExecutorDeps['health']): void {
+    this.d.health = h;
+  }
+
   /** Executes an approved run. Resolves when the run reached a final status. */
   async execute(
     runId: string,
@@ -323,6 +331,8 @@ export class RunExecutor {
         break;
       }
     } catch (e) {
+      // test seam: a simulated process crash leaves the database exactly as a killed process would
+      if (e instanceof Error && e.name === 'SimulatedCrash') throw e;
       if (e instanceof RunStop) {
         status = e.status;
         reason = e.message;

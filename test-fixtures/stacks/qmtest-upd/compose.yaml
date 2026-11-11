@@ -1,0 +1,56 @@
+# Update fixture: three services whose images come from the local fixture registry (127.0.0.1:5055).
+# db -> app (healthy) -> worker. db has a persistent volume (rollback defaults to OFF there, RT-10),
+# app and worker are stateless. Everything is named qmtest-* and labelled quaymaster.test=true.
+name: qmtest-upd
+
+x-test-label: &test-label
+  quaymaster.test: "true"
+
+x-hc: &hc
+  test: ["CMD", "test", "-f", "/tmp/ready"]
+  interval: 2s
+  timeout: 2s
+  retries: 3
+  start_period: 1s
+
+services:
+  db:
+    image: 127.0.0.1:5055/qmtest-db:latest
+    pull_policy: never
+    init: true
+    stop_grace_period: 2s
+    labels: *test-label
+    volumes:
+      - dbdata:/data
+    healthcheck: *hc
+
+  app:
+    image: 127.0.0.1:5055/qmtest-app:latest
+    pull_policy: never
+    init: true
+    stop_grace_period: 2s
+    labels: *test-label
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck: *hc
+
+  worker:
+    image: 127.0.0.1:5055/qmtest-worker:latest
+    pull_policy: never
+    init: true
+    stop_grace_period: 2s
+    labels: *test-label
+    depends_on:
+      app:
+        condition: service_started
+
+volumes:
+  dbdata:
+    name: qmtest-upd_dbdata
+    labels: *test-label
+
+networks:
+  default:
+    name: qmtest-upd_default
+    labels: *test-label

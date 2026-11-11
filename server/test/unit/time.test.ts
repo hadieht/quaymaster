@@ -68,7 +68,13 @@ describe('cron occurrences (DST-safe)', () => {
   });
 
   it('a frequent job inside the gap does not fire twice at the same instant', () => {
-    const occ = nextOccurrences('*/15 2 * * *', BER, utc('2026-03-29T00:00:00Z'), 10, utc('2026-03-29T02:00:00Z'));
+    const occ = nextOccurrences(
+      '*/15 2 * * *',
+      BER,
+      utc('2026-03-29T00:00:00Z'),
+      10,
+      utc('2026-03-29T02:00:00Z'),
+    );
     expect(new Set(occ).size).toBe(occ.length);
     expect(occ.filter((t) => t === utc('2026-03-29T01:00:00Z'))).toHaveLength(1);
   });

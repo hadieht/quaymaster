@@ -13,7 +13,8 @@ export const SECRET_KEY_RE =
   /pass|pwd|secret|token|key|credential|auth|private|cert|dsn|connection|cookie|session|salt|signature|webhook|psk|seed|mnemonic|passphrase|otp|bearer|apikey|access|license|encrypt|hash|hmac/i;
 
 /** Keys that match the secret pattern but are known to be harmless and useful to show. */
-const SAFE_KEY_RE = /^(sandboxkey|com\.docker\.compose\.config-hash|org\.opencontainers\.image\..+)$/i;
+const SAFE_KEY_RE =
+  /^(sandboxkey|com\.docker\.compose\.(config-hash|image)|org\.opencontainers\.image\..+)$/i;
 
 /** Query-parameter names masked in URLs (a superset of the key rules). */
 const QUERY_SECRET_RE = new RegExp(`${SECRET_KEY_RE.source}|^sig$|^s?sig(nature)?$|^code$`, 'i');
@@ -447,6 +448,8 @@ export function redactLabels(
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(labels)) {
     if (v === '' || v === MASK) out[k] = v;
+    else if (SAFE_KEY_RE.test(k))
+      out[k] = v; // Docker/Compose bookkeeping (config hash, image ID): not secrets
     else if (isSecretKey(k) || looksLikeSecretValue(v)) {
       opts.sink?.(v);
       out[k] = MASK;

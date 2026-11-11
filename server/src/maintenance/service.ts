@@ -36,7 +36,7 @@ import { AppError, badRequest, conflict, notFound } from '../util/errors.js';
 import type { Logger } from '../util/logger.js';
 import type { Clock } from './clock.js';
 import type { RunExecutor } from './executor.js';
-import { PolicyResolver } from './policy.js';
+import type { PolicyResolver } from './policy.js';
 import type { Planner } from './planner.js';
 import {
   cronError,

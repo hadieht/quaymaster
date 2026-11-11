@@ -28,7 +28,8 @@ import { cacheKey, parseImageRef } from '../registry/reference.js';
 import type { Guard } from '../security/guard.js';
 import { AppError } from '../util/errors.js';
 import type { Logger } from '../util/logger.js';
-import { PolicyResolver, resolveAutoRollback, unattendedBlockers } from './policy.js';
+import type { PolicyResolver} from './policy.js';
+import { resolveAutoRollback, unattendedBlockers } from './policy.js';
 import type { UpdateService } from '../updates/detector.js';
 
 // ---- pure helpers (unit-tested) -----------------------------------------------------------

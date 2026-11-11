@@ -3,12 +3,7 @@
 // ---- update detection ---------------------------------------------------------------------
 
 export type UpdateState =
-  | 'up_to_date'
-  | 'update_available'
-  | 'update_staged'
-  | 'local_only'
-  | 'pinned_digest'
-  | 'unknown';
+  'up_to_date' | 'update_available' | 'update_staged' | 'local_only' | 'pinned_digest' | 'unknown';
 
 export interface ImageUser {
   containerId: string;
@@ -263,12 +258,7 @@ export interface RunStep {
 }
 
 export type ServiceOutcome =
-  | 'updated'
-  | 'rolled_back'
-  | 'failed'
-  | 'failed_left_as_is'
-  | 'skipped'
-  | 'dependent_recreated';
+  'updated' | 'rolled_back' | 'failed' | 'failed_left_as_is' | 'skipped' | 'dependent_recreated';
 
 export interface RunResult {
   services: { service: string; outcome: ServiceOutcome; detail: string }[];

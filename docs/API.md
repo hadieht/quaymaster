@@ -73,3 +73,15 @@ only support `start|stop|restart` through the Engine API.
 `GET /stream/logs/:ref[?tail&timestamps]` (`log`; needs `logs:read`) · `GET /stream/operations/:id` (`output`, `status`).
 Each stream is bound to the session (closed on logout/expiry/role or password change, re-validated every 60 s), limited per
 session and in total, heartbeats every 15 s, and closed when the client cannot keep up. Final event: `end {reason}`.
+
+# Phase 2 additions (updates, maintenance, notifications)
+
+All under `/api/v1`; mutations need the admin role. Types are in `shared/src/maintenance.ts` and `shared/src/notifications.ts`.
+
+**Updates & images:** `GET /updates` (cached states `up_to_date|update_available|update_staged|local_only|pinned_digest|unknown`) · `POST /updates/check` (fresh registry lookups) · `GET /updates/quarantine`, `POST /updates/quarantine/clear {target,digest?}` · `POST /images/pull {ref}` → `202 {operationId}` (pull by digest, staged; never restarts/retags) · `GET /images/staged` (staged images + rollback points) · `POST /images/cleanup/preview {categories?,minAgeHours?,labelFilter?}` → preview with `previewId`; `POST /images/cleanup/execute {previewId,confirm:previewId}` · `GET|PUT /registries/credentials`, `DELETE /registries/credentials/:host` (passwords encrypted, never returned).
+
+**Maintenance:** `GET|PUT|DELETE /maintenance/policies[/:kind/:key]` (kind `global|project|service|container`; service key `project/service`), `GET /maintenance/policies/effective?project&service&container` · windows `GET|POST /maintenance/windows`, `PUT|DELETE /maintenance/windows/:id` · schedules `GET|POST /maintenance/schedules`, `PUT|DELETE …/:id` · `POST /maintenance/plan {project,services?,applyDrift?}` (dry run, stored, changes nothing) · `POST /maintenance/runs {project,services?,startNow?,confirm?,windowId?,ignoreWindow?}` · `GET /maintenance/runs[?status&target&limit]`, `GET /maintenance/runs/:id` (plan + persisted steps) · `POST /maintenance/runs/:id/approve {planHash}` (409 `approval_stale` if the plan changed), `POST …/reject`.
+
+**Monitors:** `GET|PUT /monitors/settings`. **Notifications:** `GET /notifications/types`, `GET|POST /notifications/channels`, `GET|PATCH|DELETE …/:id`, `POST …/:id/test`, `GET /notifications/deliveries`.
+
+**SSE:** `GET /stream/maintenance` (`snapshot`, `run`), `GET /stream/operations/:id` (a run's id is its operation id: live output).
