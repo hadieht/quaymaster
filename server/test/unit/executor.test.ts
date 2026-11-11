@@ -4,12 +4,14 @@ import { openDatabase, type OpenedDb } from '../../src/db/connection.js';
 import { RunsRepo, WindowsRepo } from '../../src/db/maintenance.js';
 import { QuarantineRepo, RollbackRepo, StagedRepo } from '../../src/db/updates.js';
 import { AdjustableClock } from '../../src/maintenance/clock.js';
+import { cacheKey, parseImageRef } from '../../src/registry/reference.js';
 import { RunExecutor } from '../../src/maintenance/executor.js';
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- fakes implement only what the executor touches */
 
 const LABEL_SERVICE = 'com.docker.compose.service';
 const DIGEST = (n: number): string => `sha256:${String(n).repeat(64).slice(0, 64)}`;
+const QKEY = cacheKey(parseImageRef('registry.test/db:latest')!);
 const IMG_OLD = 'sha256:' + 'a'.repeat(64);
 const IMG_NEW = 'sha256:' + 'b'.repeat(64);
 const IMG_BAD = 'sha256:' + 'c'.repeat(64);
@@ -328,6 +330,7 @@ describe('RunExecutor audit 01b regressions (fake Docker)', () => {
       "INSERT INTO operations (id, kind, target, status, actor, started_at) VALUES ('r1','maintenance.update','p','running','t',0)",
     ).run();
     const runs = new RunsRepo(db);
+    const quarantine = new QuarantineRepo(db);
     const p = plan(services);
     const notes: string[] = [];
     const ex = new RunExecutor({
@@ -341,7 +344,7 @@ describe('RunExecutor audit 01b regressions (fake Docker)', () => {
       windows: new WindowsRepo(db),
       rollback: new RollbackRepo(db),
       staged: new StagedRepo(db),
-      quarantine: new QuarantineRepo(db),
+      quarantine,
       audit: { record: () => undefined } as any,
       notify: (e) => void notes.push(`${e.type}`),
       config: { rollbackRetentionMs: 86_400_000 },
@@ -367,7 +370,7 @@ describe('RunExecutor audit 01b regressions (fake Docker)', () => {
         return flags.shuttingDown;
       },
     } as any;
-    return { ex, runs, notes, flags, exec: () => ex.execute('r1', ctx, () => 'new') };
+    return { ex, runs, quarantine, notes, flags, exec: () => ex.execute('r1', ctx, () => 'new') };
   }
 
   it('F-01: a configuration change between two services stops the run before the second recreate', async () => {
@@ -491,6 +494,34 @@ describe('RunExecutor audit 01b regressions (fake Docker)', () => {
     expect((calls[0]?.[3] as { name: string }).name).toBe('system');
     fail = true;
     expect(await (t.ex as any).restartContainer('abc')).toBe('out of scope');
+  });
+
+  it('L-3: a failed compose up is not quarantined; an image that failed its health gate is', async () => {
+    const world = new World(['db']);
+    const c = world.compose();
+    c.deployServices = async () => ({ code: 1, timedOut: false, stderrTail: 'bad yaml', argv: [] });
+    world.compose = () => c;
+    const t = harness([svc('db', { autoRollback: false, autoRollbackReason: 'x' })], world);
+    expect(await t.exec()).toBe('failed');
+    expect(t.quarantine.isQuarantined(QKEY, DIGEST(2))).toBe(false);
+    const w2 = new World(['db']);
+    w2.unhealthy.add(IMG_BAD);
+    const t2 = harness([svc('db')], w2);
+    await t2.exec();
+    expect(t2.quarantine.isQuarantined(QKEY, DIGEST(2))).toBe(true);
+  });
+
+  it('L-6: replicas on mixed images make the recovery point refuse (approval_stale)', async () => {
+    const world = new World(['db']);
+    world.containers.set('extra', {
+      Id: 'extra',
+      ImageID: IMG_NEW,
+      State: 'running',
+      Labels: { [LABEL_SERVICE]: 'db' },
+    });
+    const t = harness([svc('db')], world);
+    expect(await t.exec()).toBe('approval_stale');
+    expect(world.deploys).toEqual([]);
   });
 
   it('F-02: after a normal outcome no intent is left open', async () => {

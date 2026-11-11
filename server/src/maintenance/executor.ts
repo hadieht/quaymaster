@@ -214,7 +214,8 @@ export class RunExecutor {
           );
           // the rollback image ID comes from the RUNNING container, never from the tag (RT-06)
           const imageId = live[0]?.ImageID;
-          if (!imageId || imageId !== s.fromImageId)
+          // L-6: with replicas on mixed images EVERY container must still run the planned image
+          if (!imageId || imageId !== s.fromImageId || live.some((c) => c.ImageID !== s.fromImageId))
             throw new RunStop(
               'approval_stale',
               `${s.service} no longer runs the planned image`,
@@ -643,7 +644,9 @@ export class RunExecutor {
     }
 
     // ---- 9. failure: quarantine, then rollback or exact manual recovery
-    if (isUpdate && ref && s.toDigest) {
+    // L-3 (RT-22): only an image that actually started and failed its health gate is quarantined; a failed
+    // `compose up` is as likely a configuration problem as an image problem
+    if (isUpdate && ref && s.toDigest && deployRes.ok) {
       if (this.d.quarantine.add(cacheKey(ref), s.toDigest, runId, why, this.d.clock.now())) {
         this.d.notify({
           type: 'run.failed',

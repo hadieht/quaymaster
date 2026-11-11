@@ -852,7 +852,17 @@ export class MaintenanceService {
           this.d.schedules.setCursor(s.id, now);
           continue;
         }
-        const due = nextOccurrences(s.cron, s.timezone, s.cursorUtc, 50, now);
+        // L-1 (RT-09): collect EVERY occurrence up to now (in chunks) so "the latest" really is the latest; a huge
+        // backlog (cron every minute after weeks offline) is worked off over several ticks via the cursor
+        const due: number[] = [];
+        let capped = false;
+        for (let chunk = 0; chunk < 20; chunk++) {
+          const after = due[due.length - 1] ?? s.cursorUtc;
+          const part = nextOccurrences(s.cron, s.timezone, after, 500, now);
+          due.push(...part);
+          if (part.length < 500) break;
+          if (chunk === 19) capped = true;
+        }
         for (const [i, occ] of due.entries()) {
           if (!this.d.occurrences.claim(s.id, occ, 'claimed')) continue; // RT-09: handled before, never again
           const missed = now - occ > MISSED_GRACE_MS;
@@ -882,7 +892,7 @@ export class MaintenanceService {
             this.d.log.error({ err: e, schedule: s.name }, 'scheduled job failed to start');
           }
         }
-        this.d.schedules.setCursor(s.id, now);
+        this.d.schedules.setCursor(s.id, capped ? (due[due.length - 1] ?? now) : now);
       }
     } finally {
       this.ticking = false;
