@@ -4,6 +4,10 @@ import { ZodError, type ZodTypeAny, type z } from 'zod';
 import type { ErrorEnvelope } from '@quaymaster/shared';
 import type { AuthContext, Permission } from './auth/service.js';
 import type { AppContext } from './context.js';
+import { existsSync, readFileSync } from 'node:fs';
+import type { ServerResponse } from 'node:http';
+import path from 'node:path';
+import fastifyStatic from '@fastify/static';
 import { SECURITY_HEADERS } from './http/sse.js';
 import { globalScrubber, redactDeep, redactText } from './redaction/redact.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -103,6 +107,12 @@ export function actorOf(req: FastifyRequest): { name: string; ip: string | null 
   return { name: req.auth?.user.username ?? 'anonymous', ip: req.ip };
 }
 
+/** The built UI directory, or null when it has not been built (API-only mode). */
+export function resolveWebDir(configured: string | null | undefined): string | null {
+  const dir = configured ?? path.resolve(import.meta.dirname, '../../web/dist');
+  return existsSync(path.join(dir, 'index.html')) ? dir : null;
+}
+
 export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   const { config } = ctx;
   const app: FastifyInstance = Fastify({
@@ -200,7 +210,17 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     },
   );
 
-  app.setNotFoundHandler((_req, reply) => {
+  const webDir = resolveWebDir(config.webDir);
+  app.setNotFoundHandler((req, reply) => {
+    const url = req.url.split('?')[0] ?? '';
+    if (webDir && req.method === 'GET' && !url.startsWith('/api/') && !/\.[a-z0-9]{1,8}$/i.test(url)) {
+      // SPA fallback: client-side routes are served index.html (never cached)
+      void reply
+        .header('Cache-Control', 'no-cache')
+        .type('text/html; charset=utf-8')
+        .send(readFileSync(path.join(webDir, 'index.html')));
+      return;
+    }
     void reply
       .status(404)
       .send({ error: { code: 'not_found', message: 'Route not found' } } satisfies ErrorEnvelope);
@@ -208,6 +228,22 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
 
   // RT-35: /healthz reveals nothing but liveness
   app.get('/healthz', async () => ({ status: 'ok' }));
+
+  if (webDir) {
+    await app.register(fastifyStatic, {
+      root: webDir,
+      wildcard: true,
+      index: ['index.html'],
+      setHeaders: (res, filePath) => {
+        (res as unknown as ServerResponse).setHeader(
+          'Cache-Control',
+          filePath.includes(`${path.sep}assets${path.sep}`)
+            ? 'public, max-age=31536000, immutable'
+            : 'no-cache',
+        );
+      },
+    });
+  }
 
   const prefix = '/api/v1';
   await app.register(

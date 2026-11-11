@@ -59,6 +59,7 @@ const schema = z.object({
   QM_DF_MIN_INTERVAL_SECONDS: int(60, 7 * 86400).default(6 * 3600),
   QM_SCRYPT_LOG2_N: int(10, 20).default(17),
   QM_DOCKER_BIN: z.string().default('docker'),
+  QM_WEB_DIR: z.string().optional(),
   QM_DISABLE_BACKGROUND: bool.default('false'),
   QM_REGISTRY_INSECURE: list.default(''),
   QM_CHECK_TTL_MINUTES: int(1, 7 * 24 * 60).default(360),
@@ -94,6 +95,8 @@ export interface Config {
   dfMinIntervalMs: number;
   scryptLog2N: number;
   dockerBin: string;
+  /** Directory with the built web UI (default: <repo>/web/dist). */
+  webDir?: string | null;
   disableBackground: boolean;
   registryInsecure: string[];
   checkTtlMs: number;
@@ -240,6 +243,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     dfMinIntervalMs: e.QM_DF_MIN_INTERVAL_SECONDS * 1000,
     scryptLog2N: e.QM_SCRYPT_LOG2_N,
     dockerBin: e.QM_DOCKER_BIN,
+    webDir: e.QM_WEB_DIR ? path.resolve(e.QM_WEB_DIR) : null,
     disableBackground: e.QM_DISABLE_BACKGROUND,
     registryInsecure: e.QM_REGISTRY_INSECURE,
     checkTtlMs: e.QM_CHECK_TTL_MINUTES * 60_000,

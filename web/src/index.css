@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens (RGB triplets so Tailwind opacity modifiers work). One status language:
+   healthy = green, warning = amber, critical = red, inactive = slate, info = blue. */
+:root {
+  --bg: 244 246 249;
+  --surface: 255 255 255;
+  --surface-2: 241 244 248;
+  --border: 221 226 233;
+  --fg: 17 24 39;
+  --muted: 92 102 118;
+  --accent: 14 116 144;
+  --accent-fg: 255 255 255;
+  --healthy: 21 128 61;
+  --warning: 180 83 9;
+  --critical: 185 28 28;
+  --inactive: 100 116 139;
+  --info: 29 78 216;
+  color-scheme: light;
+}
+.dark {
+  --bg: 11 15 22;
+  --surface: 20 26 36;
+  --surface-2: 28 36 49;
+  --border: 45 55 72;
+  --fg: 232 236 242;
+  --muted: 150 161 178;
+  --accent: 34 190 220;
+  --accent-fg: 6 20 26;
+  --healthy: 74 222 128;
+  --warning: 251 191 36;
+  --critical: 248 113 113;
+  --inactive: 148 163 184;
+  --info: 96 165 250;
+  color-scheme: dark;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-bg font-sans text-sm text-fg antialiased;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2 ring-offset-bg;
+  }
+  ::selection {
+    background: rgb(var(--accent) / 0.3);
+  }
+  code,
+  pre,
+  kbd {
+    @apply font-mono;
+  }
+}
+
+@layer components {
+  .qm-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--border)) transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
