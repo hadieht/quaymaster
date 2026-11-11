@@ -111,7 +111,9 @@ export async function startApp(
     return { cookie: setCookie.split(';')[0] as string, csrf: res.body.csrfToken as string };
   };
 
-  await ctx.auth.createUser({ ...ADMIN, role: 'admin' });
+  await ctx.auth.createUser({ ...ADMIN, role: 'admin' }).catch((e: unknown) => {
+    if (!over['QM_DATA_DIR']) throw e; // a reused data dir already has the user
+  });
   const admin = await login(ADMIN.username, ADMIN.password);
 
   return {

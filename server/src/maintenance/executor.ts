@@ -109,13 +109,13 @@ export class RunExecutor {
     const step = async <T>(
       name: string,
       service: string | null,
-      fn: () => Promise<{ value: T; detail?: unknown }>,
+      fn: () => Promise<{ value: T; detail?: unknown; failed?: boolean }>,
     ): Promise<T> => {
       const id = this.d.runs.startStep(runId, ++seq, service, name);
       await this.d.onStep?.({ runId, step: name, service, phase: 'start' });
       try {
-        const { value, detail } = await fn();
-        this.d.runs.finishStep(id, 'succeeded', detail);
+        const { value, detail, failed } = await fn();
+        this.d.runs.finishStep(id, failed ? 'failed' : 'succeeded', detail);
         await this.d.onStep?.({ runId, step: name, service, phase: 'end' });
         return value;
       } catch (e) {
@@ -379,7 +379,7 @@ export class RunExecutor {
     step: <T>(
       name: string,
       service: string | null,
-      fn: () => Promise<{ value: T; detail?: unknown }>,
+      fn: () => Promise<{ value: T; detail?: unknown; failed?: boolean }>,
     ) => Promise<T>,
     log: (t: string) => void,
     ctx: OperationContext,
@@ -430,12 +430,14 @@ export class RunExecutor {
               ok: false as const,
               why: `docker compose up exited with code ${r.code}: ${r.stderrTail}`,
             },
+            failed: true,
             detail: { code: r.code },
           };
         return { value: { ok: true as const, why: '' }, detail: { argv: r.argv } };
       } catch (e) {
         return {
           value: { ok: false as const, why: (e as Error).message },
+          failed: true,
           detail: { error: (e as Error).message },
         };
       }
@@ -464,7 +466,11 @@ export class RunExecutor {
             s,
             expected,
           );
-          return { value: res, detail: { ok: res.ok, reason: res.reason, ms: res.elapsedMs } };
+          return {
+            value: res,
+            failed: !res.ok,
+            detail: { ok: res.ok, reason: res.reason, ms: res.elapsedMs },
+          };
         });
         healthy = r.ok;
         why = r.reason;
@@ -540,7 +546,7 @@ export class RunExecutor {
     step: <T>(
       name: string,
       service: string | null,
-      fn: () => Promise<{ value: T; detail?: unknown }>,
+      fn: () => Promise<{ value: T; detail?: unknown; failed?: boolean }>,
     ) => Promise<T>,
     log: (t: string) => void,
     ctx: OperationContext,
@@ -586,7 +592,11 @@ export class RunExecutor {
           s,
           oldId,
         );
-        return { value: { ok: h.ok, why: h.reason }, detail: { ok: h.ok, reason: h.reason } };
+        return {
+          value: { ok: h.ok, why: h.reason },
+          failed: !h.ok,
+          detail: { ok: h.ok, reason: h.reason },
+        };
       } catch (e) {
         return { value: { ok: false, why: (e as Error).message } };
       }
@@ -643,7 +653,7 @@ export class RunExecutor {
     step: <T>(
       name: string,
       service: string | null,
-      fn: () => Promise<{ value: T; detail?: unknown }>,
+      fn: () => Promise<{ value: T; detail?: unknown; failed?: boolean }>,
     ) => Promise<T>,
   ): Promise<string | null> {
     const inRun = new Set(plan.services.map((x) => x.service));
