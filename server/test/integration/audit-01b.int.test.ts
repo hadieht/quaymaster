@@ -161,7 +161,7 @@ describe('audit 01b regressions: update engine (fixtures only)', { timeout: 300_
       steps: { service: string | null; step: string; status: string }[];
     };
     const env = docker('inspect', '--format', '{{json .Config.Env}}', 'qmtest-upd-worker-1');
-     
+
     console.log('F-01', run.status, run.approvedBy, stepLog(run).join(' '), env);
     expect(
       env,
@@ -214,7 +214,7 @@ describe('audit 01b regressions: update engine (fixtures only)', { timeout: 300_
         t2.admin,
       );
       const app = snap('app');
-       
+
       console.log(
         'F-02',
         run.body.status,
@@ -262,7 +262,7 @@ describe('audit 01b regressions: update engine (fixtures only)', { timeout: 300_
     await waitFor(async () => shutdown !== null, 'shutdown triggered', 120_000, 200);
     await shutdown;
     const after = starts.filter((s) => s.at > shutdownAt && s.step === 'deploy').map((s) => s.service);
-     
+
     console.log('F-03 deploy steps started after shutdown began:', after, 'versions:', {
       db: versionOf(snap('db').imageId),
       app: versionOf(snap('app').imageId),
@@ -367,7 +367,7 @@ services:
       { project: PROJECT, services: ['app'], startNow: true, confirm: PROJECT },
       t.admin,
     );
-    expect(r.status, r.raw).toBe(202);
+    expect(r.status, r.raw).toBe(201); // refused at preflight: the run is created as `blocked`
     const run = (await waitRun(t, r.body.id)) as never as {
       status: string;
       plan: { impact: { sharedTag: { containerName: string }[] } };
@@ -400,7 +400,7 @@ services:
     const staged = (await t.call('GET', '/api/v1/images/staged', undefined, t.admin)).body.staged as {
       ref: string;
     }[];
-     
+
     console.log(
       'F-05',
       `run=${run.status}`,
@@ -440,7 +440,7 @@ services:
       plan: { services: { service: string; role: string; critical: boolean }[] };
     };
     const consumerAfter = cid(`${NS_PROJECT}-consumer-1`);
-     
+
     console.log(
       'F-06',
       run.status,

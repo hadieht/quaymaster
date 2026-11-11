@@ -289,3 +289,30 @@ outside the run.
 puts a "run update" button on top of the engine, fix F-01 to F-03 (they are one theme: the run is only safe at its start and
 lies about its own state after a crash or shutdown). Also fix F-04 and F-05, which can each change or corrupt services the
 user never chose to update.
+
+## Phase 2c resolution (finding → status)
+
+Fixed in phase 2c (task t_84b27f76). Commit subjects are in `git log`; tests named below are the regression tests.
+
+| Finding | Status | Fix / regression test |
+|---|---|---|
+| F-01 (HIGH) | **fixed** — `fix(executor): per-service drift gate …` | `config --hash` re-checked right before every recreate; mismatch or unverifiable hash stops the run (`blocked`/`partial`), no rollback, critical alert. Also gates rollback and restore (`checkDrift`). `executor.test.ts` F-01 (3 tests + rollback test), `audit-01b.int` F-01 |
+| F-02 (HIGH) | **fixed** — same commit + `fix(standalone,recover)` | deploy intent stays open until the service outcome is final; `recover()` compares the live image with `fromImage`/`toImage`, prints tag-restore + compose commands, raises `service.left_down` or an "unverified" warning. Standalone path likewise. `recover.test.ts`, `executor.test.ts` F-02, `audit-01b.int` F-02 |
+| F-03 (HIGH) | **fixed** | `OperationContext.shuttingDown`; executor skips remaining services (`partial`/`skipped`) once shutdown began, never interrupts a running health/rollback step. `executor.test.ts` F-03, `audit-01b.int` F-03. `stop_grace_period` guidance: see DECISIONS |
+| F-04 (HIGH) | **fixed** — `fix(compose): remove the Compose pull action` | `pull` removed from actions/argv builder; `assertSafeArgv` refuses `pull` and other unneeded subcommands. `core.test.ts`, `actions.int` (400), `audit-01b.int` F-04 |
+| F-05 (HIGH) | **fixed** | kept `-qm-old-` container gets `RestartPolicy=no` (new narrow permit `container_restart_policy`), original policy restored on undo and printed in the result. `core.test.ts` F-05 (permit). **Not executed against a real daemon restart** (forbidden); `standalone.int` still green is required, see report |
+| F-06 (MED) | **fixed** | planner preflight refuses when a container sharing the tag is out of scope/protected; `image_pull` job filters to in-scope images; policy PUT validates the target against scope; standalone `prepare` refuses likewise. `audit-01b.int` F-05 |
+| F-07 (MED) | **fixed (code), integration not reproduced** | dependents count for unattended eligibility (planner computes blockers for them, service checks every service). The fixture scenario is still stopped earlier by an unrelated drift (see F-06 demo output), so only the code path is verified, not an end-to-end test |
+| F-08 (MED) | **fixed** | shared tag is put back on `fromImageId` when an update does not stick (deploy failure, left as is); guidance says so; crash case printed by `recover()`. `executor.test.ts` F-08 |
+| F-09 (MED) | **fixed** | project/global `autoRollback:true` applies to stateless services only; service/container level may override. `maintenance.test.ts` F-09 |
+| F-10 (MED) | **fixed** | dependent restart goes through `ContainerService.act` (guard, audit); failures recorded in the step detail. `executor.test.ts` F-10 |
+| F-11 (MED) | **fixed** | `recover()` branches on `standalone_clone`: inspects by id/name, prints rename/start commands. `recover.test.ts` F-11 (not executed with a real crash of a standalone swap) |
+| F-12 (MED) | **fixed** | `scheduler.test.ts`: claim idempotency, claimed-never-fires, missed → at most one in a window, no window → none, 1800-occurrence backlog, start failure |
+| F-13 (MED) | **fixed** | restore uses intents, drift gate and the `services` filter (which was silently ignored before); orphan restore intents reported at startup. `executor.test.ts` F-13, `recover.test.ts` |
+| L-1 | **fixed** | full backlog scan in chunks (`scheduler.test.ts`) |
+| L-2 | **fixed** | `approved` runs interrupted at startup (`recover.test.ts`) |
+| L-3 | **fixed** | only health-gate failures are quarantined (`executor.test.ts`) |
+| L-4 | deferred | one-shot detection beyond `service_completed_successfully` needs a product decision (restart policy heuristics); see DECISIONS |
+| L-5 | deferred | unknown compressed sizes: floor-only check remains (fails closed only when free space is unknown); see DECISIONS |
+| L-6 | **fixed** | recovery point checks every replica (`executor.test.ts`) |
+| extra LOW (redaction test teardown) | deferred | test hygiene only; see DECISIONS |
