@@ -204,6 +204,8 @@ describe('audit 01b regressions: update engine (fixtures only)', { timeout: 300_
     );
     const dataDir = t.config.dataDir;
     await t.close();
+    // the crash image takes a moment to die; the restarted instance must see it down (the scenario under test)
+    await waitFor(async () => snap('app').status !== 'running', 'app down', 60_000, 500);
     const t2 = await startApp({ QM_DATA_DIR: dataDir });
     try {
       const run = await t2.call('GET', `/api/v1/maintenance/runs/${id}`, undefined, t2.admin);

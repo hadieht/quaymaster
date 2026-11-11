@@ -43,13 +43,9 @@ describe('update detection, pull and dry run (real Docker + fixture registry)', 
 
   it('dry run changes nothing: containers keep ID and StartedAt, nothing is pulled, staged or tagged', async () => {
     const before = snapAll();
-    const imagesBefore = docker(
-      'image',
-      'ls',
-      '--format',
-      '{{.Repository}}:{{.Tag}}',
-      '--filter',
-      'label=quaymaster.test=true',
+    const sortLines = (x: string): string => x.split('\n').sort().join('\n');
+    const imagesBefore = sortLines(
+      docker('image', 'ls', '--format', '{{.Repository}}:{{.Tag}}', '--filter', 'label=quaymaster.test=true'),
     );
     const res = await t.call('POST', '/api/v1/maintenance/plan', { project: PROJECT }, t.admin);
     expect(res.status).toBe(200);
@@ -73,7 +69,16 @@ describe('update detection, pull and dry run (real Docker + fixture registry)', 
     // nothing changed
     expect(snapAll()).toEqual(before);
     expect(
-      docker('image', 'ls', '--format', '{{.Repository}}:{{.Tag}}', '--filter', 'label=quaymaster.test=true'),
+      sortLines(
+        docker(
+          'image',
+          'ls',
+          '--format',
+          '{{.Repository}}:{{.Tag}}',
+          '--filter',
+          'label=quaymaster.test=true',
+        ),
+      ),
     ).toBe(imagesBefore);
     expect((await t.call('GET', '/api/v1/images/staged', undefined, t.admin)).body.staged).toEqual([]);
     expect(t.ctx.rollbackRepo.list()).toEqual([]);

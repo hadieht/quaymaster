@@ -25,6 +25,7 @@ describe('no fixture secret leaves the process (RT-04)', () => {
   });
   afterAll(async () => {
     await t.close();
+    fixtures('down');
   });
 
   it('API responses, events, logs, operation output, audit, DB bytes and application logs are clean', async () => {
