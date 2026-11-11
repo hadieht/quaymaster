@@ -512,6 +512,15 @@ export class RunsRepo {
     return rows;
   }
 
+  /** Approved but never started (the process died in between): never run later on a stale approval (L-2). */
+  interruptApproved(): number {
+    return this.db
+      .prepare(
+        "UPDATE runs SET status='interrupted', finished_at=?, reason='Quaymaster stopped before this approved run started; nothing was changed' WHERE status='approved'",
+      )
+      .run(Date.now()).changes;
+  }
+
   /** Overdue approvals (spec 7.4): awaiting_approval past their expiry become `skipped`. */
   expireApprovals(now: number): RunRow[] {
     const rows = (

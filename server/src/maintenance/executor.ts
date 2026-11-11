@@ -295,7 +295,8 @@ export class RunExecutor {
         if (ctx.shuttingDown) {
           skipRest('Quaymaster is shutting down; the service was not started', 'shutdown');
           status = anyUpdated() ? 'partial' : 'skipped';
-          reason = 'Quaymaster is shutting down; the remaining services were skipped (nothing was interrupted)';
+          reason =
+            'Quaymaster is shutting down; the remaining services were skipped (nothing was interrupted)';
           break;
         }
         if (windowEnd !== null && this.d.clock.now() + s.health.timeoutSeconds * 1000 > windowEnd) {

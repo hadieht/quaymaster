@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type Dockerode from 'dockerode';
 import type {
   MaintenanceWindow,
   MaintenanceWindowInput,
@@ -11,9 +12,11 @@ import type {
   ScheduleInput,
 } from '@quaymaster/shared';
 import type { AuditService } from '../audit/audit.js';
+import { shQuote } from '../compose/argv.js';
 import type { ComposeService } from '../compose/service.js';
 import type { Config } from '../config/env.js';
 import type {
+  IntentRow,
   OccurrencesRepo,
   RunOptions,
   RunRow,
@@ -24,11 +27,11 @@ import type {
   WindowRow,
   WindowsRepo,
 } from '../db/maintenance.js';
-import type { Actor } from '../docker/containers.js';
+import type { Actor, ContainerService } from '../docker/containers.js';
 import { LABEL } from '../docker/model.js';
 import type { ImageOps } from '../docker/imageops.js';
 import type { OperationManager } from '../operations/manager.js';
-import { parseImageRef } from '../registry/reference.js';
+import { engineName, parseImageRef } from '../registry/reference.js';
 import type { Guard } from '../security/guard.js';
 import type { CleanupService } from '../updates/cleanup.js';
 import type { UpdateService } from '../updates/detector.js';
@@ -128,6 +131,7 @@ export class MaintenanceService {
       images: ImageOps;
       cleanup: CleanupService;
       compose: ComposeService;
+      containers: ContainerService;
       guard: Guard;
       audit: AuditService;
       notify: (e: NotificationEvent) => void;
@@ -612,47 +616,43 @@ export class MaintenanceService {
   /** At startup: running runs become `interrupted` (never resumed); services left down raise a critical alert. */
   async recover(): Promise<number> {
     const interrupted = this.d.runs.interruptRunning();
+    // runs that were approved but never started stay `approved` forever otherwise (L-2)
+    this.d.runs.interruptApproved();
     for (const run of interrupted) {
       this.d.runs.failOpenSteps(run.id);
       const guidance: string[] = [];
       let leftDown = false;
+      let unverified = false;
       const intents = this.d.runs.openIntents(run.id);
+      let all: Dockerode.ContainerInfo[] = [];
+      try {
+        all = await this.d.containers.listRaw(true);
+      } catch {
+        /* Docker unreachable: the alert below still goes out */
+      }
       for (const it of intents) {
-        const project = run.target;
-        let live: { State: string; ImageID: string }[] = [];
-        try {
-          live = (await this.d.compose.projectContainers(project)).filter(
-            (c) => c.Labels?.[LABEL.service] === it.service,
-          );
-        } catch {
-          /* Docker unreachable: the alert below still goes out */
-        }
-        const down = live.length === 0 || live.some((c) => c.State !== 'running');
-        guidance.push(
-          `${it.service}: interrupted during "${it.action}" (from ${it.fromImage?.slice(0, 19) ?? '?'} to ${it.toImage?.slice(0, 19) ?? '?'}); it is currently ${down ? 'NOT running' : 'running'}.`,
-        );
-        if (down) {
-          leftDown = true;
-          const plan = run.plan;
-          const s = plan?.services.find((x) => x.service === it.service);
-          const ref = s ? parseImageRef(s.ref) : null;
-          try {
-            const { target } = await this.d.compose.targetOf(project);
-            const files = target.files.map((f) => `--file ${f}`).join(' ');
-            guidance.push(
-              `${ref && s ? `docker tag ${s.fromImageId} ${ref.registry === 'docker.io' ? ref.repo.replace(/^library\//, '') : `${ref.registry}/${ref.repo}`}:${ref.tag ?? 'latest'}\n` : ''}docker compose --project-name ${project} --project-directory ${target.workingDir} ${files} up -d --no-deps --pull never --no-build -- ${it.service}`,
-            );
-          } catch {
-            guidance.push(
-              `Bring ${it.service} back with docker compose up -d --no-deps ${it.service} in project ${project}.`,
-            );
-          }
+        const r =
+          it.action === 'standalone_clone'
+            ? this.describeStandalone(it, all)
+            : await this.describeCompose(run, it, all);
+        guidance.push(...r.guidance);
+        if (r.down) leftDown = true;
+        else if (r.unverified) unverified = true;
+        if (r.down) {
           this.d.notify({
             type: 'service.left_down',
             severity: 'critical',
-            title: `Service left down after a crash: ${project}/${it.service}`,
-            message: `Quaymaster stopped while it was recreating ${it.service}; the service is not running. Recovery: see run ${run.id}.`,
+            title: `Service left down after a crash: ${r.title}`,
+            message: `Quaymaster stopped while it was updating ${it.service}; the service is not running. Recovery: see run ${run.id}.`,
             dedupeKey: `leftdown:${run.id}:${it.service}`,
+          });
+        } else if (r.unverified) {
+          this.d.notify({
+            type: 'run.interrupted',
+            severity: 'warning',
+            title: `Update unverified after a crash: ${r.title}`,
+            message: `Quaymaster stopped while ${it.service} was being updated; it is running but its health was never confirmed. See run ${run.id}.`,
+            dedupeKey: `unverified:${run.id}:${it.service}`,
           });
         }
         this.d.runs.completeIntent(it.id);
@@ -676,11 +676,113 @@ export class MaintenanceService {
         actor: 'system',
         action: 'maintenance.run.interrupted',
         target: run.target,
-        params: { run: run.id, leftDown },
+        params: { run: run.id, leftDown, unverified },
         outcome: 'failure',
       });
     }
     return interrupted.length;
+  }
+
+  /**
+   * Compares the LIVE state with the intent instead of trusting the intent alone (RT-14): a crash during the
+   * health gate must not read as "nothing changed".
+   */
+  private async describeCompose(
+    run: RunRow,
+    it: IntentRow,
+    all: Dockerode.ContainerInfo[],
+  ): Promise<{ guidance: string[]; down: boolean; unverified: boolean; title: string }> {
+    const project = run.target;
+    const live = all.filter(
+      (c) => c.Labels?.[LABEL.project] === project && c.Labels?.[LABEL.service] === it.service,
+    );
+    const down = live.length === 0 || live.some((c) => c.State !== 'running');
+    const short = (x: string | null | undefined): string => x?.slice(0, 19) ?? '?';
+    const onFrom = it.fromImage !== null && live.length > 0 && live.every((c) => c.ImageID === it.fromImage);
+    const onTo = it.toImage !== null && live.length > 0 && live.every((c) => c.ImageID === it.toImage);
+    const where =
+      live.length === 0
+        ? 'no container'
+        : onFrom
+          ? 'the previous image'
+          : onTo
+            ? 'the new image'
+            : 'a different image';
+    const guidance = [
+      `${it.service}: interrupted during "${it.action}" (from ${short(it.fromImage)} to ${short(it.toImage)}); it is currently ${down ? 'NOT running' : 'running'} on ${where}.`,
+    ];
+    const s = run.plan?.services.find((x) => x.service === it.service);
+    const ref = s ? parseImageRef(s.ref) : null;
+    const needsRestore = it.fromImage !== null && !onFrom;
+    const tagMayBeMoved = it.action === 'deploy' && it.toImage !== null;
+    if (down || needsRestore || tagMayBeMoved) {
+      try {
+        const { target } = await this.d.compose.targetOf(project);
+        const files = target.files.map((f) => `--file ${shQuote(f)}`).join(' ');
+        const repoTag = ref ? `${engineName(ref)}:${ref.tag ?? 'latest'}` : null;
+        const tagCmd =
+          s && repoTag && it.fromImage ? `docker tag ${s.fromImageId} ${shQuote(repoTag)}` : null;
+        if (tagCmd) guidance.push('Put the shared tag back on the previous image:', tagCmd);
+        if (down || needsRestore)
+          guidance.push(
+            `docker compose --project-name ${shQuote(project)} --project-directory ${shQuote(target.workingDir)} ${files} up -d --no-deps --pull never --no-build -- ${shQuote(it.service ?? '')}`,
+          );
+      } catch {
+        guidance.push(
+          `Bring ${it.service} back with docker compose up -d --no-deps ${it.service} in project ${project}.`,
+        );
+      }
+    }
+    return {
+      guidance,
+      down,
+      unverified: !down && (needsRestore || it.action === 'deploy'),
+      title: `${project}/${it.service}`,
+    };
+  }
+
+  /** A standalone swap is not a Compose service: inspect the containers by id/name and print exact commands (F-11). */
+  private describeStandalone(
+    it: IntentRow,
+    all: Dockerode.ContainerInfo[],
+  ): { guidance: string[]; down: boolean; unverified: boolean; title: string } {
+    const name = it.service ?? '';
+    const nameOf = (c: Dockerode.ContainerInfo): string => (c.Names?.[0] ?? '').replace(/^\//, '');
+    const oldId = it.containerIdsBefore[0];
+    const old = all.find((c) => c.Id === oldId);
+    const clone = all.find((c) =>
+      new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}-qm-new-\\d+$`).test(nameOf(c)),
+    );
+    const current = all.find((c) => nameOf(c) === name);
+    const oldName = old ? nameOf(old) : null;
+    const guidance: string[] = [];
+    let down: boolean;
+    let unverified = false;
+    if (old && oldName === name) {
+      // the swap never happened or was undone: the original container still carries the name
+      down = old.State !== 'running';
+      guidance.push(
+        `${name}: interrupted during a container update; the original container still has its name and is ${down ? 'NOT running' : 'running'}.`,
+      );
+      if (down) guidance.push(`docker start ${shQuote(name)}`);
+      if (clone) guidance.push(`Remove the unused clone: docker rm -f ${shQuote(nameOf(clone))}`);
+    } else {
+      down = !current || current.State !== 'running';
+      unverified = !down;
+      guidance.push(
+        `${name}: interrupted during a container update. The previous container was renamed to "${oldName ?? '(not found)'}"; "${name}" ${current ? `is ${current.State}` : 'does not exist'}${current && current.State === 'running' ? ' (new image, health never confirmed)' : ''}.`,
+      );
+      if (oldName) {
+        guidance.push(
+          'To go back to the previous container:',
+          ...(current ? [`docker rm -f ${shQuote(name)}`] : []),
+          `docker rename ${shQuote(oldName)} ${shQuote(name)}`,
+          `docker update --restart=unless-stopped ${shQuote(name)}   # its restart policy was set to "no" by the update; use your original policy`,
+          `docker start ${shQuote(name)}`,
+        );
+      }
+    }
+    return { guidance, down, unverified, title: name };
   }
 
   // ---- scheduler ------------------------------------------------------------------------------

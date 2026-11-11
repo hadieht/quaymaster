@@ -341,6 +341,7 @@ async function build(
     images: imageOps,
     cleanup,
     compose,
+    containers,
     guard,
     audit,
     notify,

@@ -217,6 +217,7 @@ export type EnginePermit =
   | { kind: 'image_remove'; name: string }
   | { kind: 'container_create'; name: string }
   | { kind: 'container_rename'; containerId: string; newName: string }
+  | { kind: 'container_restart_policy'; containerId: string }
   | { kind: 'network_connect' | 'network_disconnect'; network: string; containerId: string };
 
 export type MutationPermit = ContainerPermit | EnginePermit;
@@ -238,6 +239,7 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH']);
 const CONTAINER_POST = /^\/containers\/([0-9a-f]{64})\/(start|stop|restart|kill|pause|unpause)$/;
 const CONTAINER_DELETE = /^\/containers\/([0-9a-f]{64})$/;
 const CONTAINER_RENAME = /^\/containers\/([0-9a-f]{64})\/rename$/;
+const CONTAINER_UPDATE = /^\/containers\/([0-9a-f]{64})\/update$/;
 const NETWORK_ATTACH = /^\/networks\/([^/]+)\/(connect|disconnect)$/;
 const IMAGE_TAG = /^\/images\/(.+)\/tag$/;
 const IMAGE_DELETE = /^\/images\/(.+)$/;
@@ -317,6 +319,13 @@ export function checkEngineRequest(
     if (!permit || kind !== 'container_rename') return denyPermit(m, pathOnly);
     const p = permit as Extract<EnginePermit, { kind: 'container_rename' }>;
     if (mm[1] !== p.containerId || q.get('name') !== p.newName) return denyPermit(m, pathOnly);
+    return;
+  }
+  if (m === 'POST' && (mm = CONTAINER_UPDATE.exec(pathOnly))) {
+    // only the restart policy of a kept `-qm-old-` container is ever changed this way (RT-12)
+    if (!permit || kind !== 'container_restart_policy') return denyPermit(m, pathOnly);
+    if (mm[1] !== (permit as Extract<EnginePermit, { kind: 'container_restart_policy' }>).containerId)
+      return denyPermit(m, pathOnly);
     return;
   }
   if (m === 'POST' && (mm = NETWORK_ATTACH.exec(pathOnly))) {

@@ -124,7 +124,9 @@ export class StandaloneUpdater {
     let oldRenamed = false;
     let newRenamed = false;
     let tagMoved = false;
-
+    let intent: number | null = null;
+    let policyChanged = false;
+    let origPolicy = { Name: 'no', MaximumRetryCount: 0 };
     try {
       const c = await step('preflight', async () => {
         const cur = await d.containers.resolve(p.containerId);
@@ -168,7 +170,7 @@ export class StandaloneUpdater {
         }
       });
       const spec = buildCloneSpec(c.raw, oldImage, repoTag);
-      const intent = d.runs.addIntent({
+      intent = d.runs.addIntent({
         operationId: runId,
         service: p.name,
         action: 'standalone_clone',
@@ -207,6 +209,19 @@ export class StandaloneUpdater {
           if (e.statusCode !== 304) throw e;
         });
         oldStopped = true;
+        // RT-12: the kept container must NOT come back after a daemon/host restart, next to the clone,
+        // on the same volumes. The original policy is remembered for the undo and written into the result.
+        const hp = (c.raw.HostConfig as { RestartPolicy?: { Name?: string; MaximumRetryCount?: number } })
+          .RestartPolicy;
+        origPolicy = { Name: hp?.Name || 'no', MaximumRetryCount: hp?.MaximumRetryCount ?? 0 };
+        if (origPolicy.Name !== 'no') {
+          await withPermit({ kind: 'container_restart_policy', containerId: p.containerId }, () =>
+            d.docker
+              .getContainer(p.containerId)
+              .update({ RestartPolicy: { Name: 'no', MaximumRetryCount: 0 } } as never),
+          );
+          policyChanged = true;
+        }
         await withPermit({ kind: 'container_rename', containerId: p.containerId, newName: oldName }, () =>
           d.docker.getContainer(p.containerId).rename({ name: oldName }),
         );
@@ -218,7 +233,6 @@ export class StandaloneUpdater {
         if (c.raw.State.Running)
           await withPermit({ containerId: nid, action: 'start' }, () => d.docker.getContainer(nid).start());
       });
-      d.runs.completeIntent(intent);
       d.audit.record({
         actor: 'system',
         action: 'maintenance.standalone.deploy',
@@ -255,7 +269,7 @@ export class StandaloneUpdater {
       }
       d.staged.delete(stagedTag(ref, p.toDigest));
       await d.images.remove(stagedTag(ref, p.toDigest)).catch(() => undefined);
-      reason = `${p.name} now runs ${p.toDigest.slice(0, 19)}; the previous container is kept stopped as ${oldName} for ${Math.round(d.config.rollbackRetentionMs / 3_600_000)} h`;
+      reason = `${p.name} now runs ${p.toDigest.slice(0, 19)}; the previous container is kept stopped as ${oldName} for ${Math.round(d.config.rollbackRetentionMs / 3_600_000)} h${policyChanged ? ` (its restart policy "${origPolicy.Name}" was set to "no" so it cannot start next to the new container after a reboot; to go back: docker stop ${p.name} && docker rename ${p.name} ${p.name}-new && docker rename ${oldName} ${p.name} && docker update --restart=${origPolicy.Name}${origPolicy.Name === 'on-failure' && origPolicy.MaximumRetryCount ? `:${origPolicy.MaximumRetryCount}` : ''} ${p.name} && docker start ${p.name})` : ''}`;
     } catch (e) {
       const why = (e as Error).message;
       reason = why;
@@ -277,10 +291,15 @@ export class StandaloneUpdater {
             await withPermit({ kind: 'container_rename', containerId: p.containerId, newName: p.name }, () =>
               d.docker.getContainer(p.containerId).rename({ name: p.name }),
             );
-          if (oldStopped)
+          if (oldStopped) {
+            if (policyChanged)
+              await withPermit({ kind: 'container_restart_policy', containerId: p.containerId }, () =>
+                d.docker.getContainer(p.containerId).update({ RestartPolicy: origPolicy } as never),
+              );
             await withPermit({ containerId: p.containerId, action: 'start' }, () =>
               d.docker.getContainer(p.containerId).start(),
             );
+          }
           if (tagMoved) await d.images.tag(p.fromImageId, repoTag);
           return true;
         }).catch((er: Error) => {
@@ -301,6 +320,7 @@ export class StandaloneUpdater {
       }
     }
 
+    if (intent !== null) d.runs.completeIntent(intent); // outcome is final (success, undone, or undo failed + guidance)
     const outcome = status === 'completed' ? 'updated' : status === 'rolled_back' ? 'rolled_back' : 'failed';
     d.runs.finish(
       runId,
