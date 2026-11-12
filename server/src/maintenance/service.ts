@@ -411,6 +411,9 @@ export class MaintenanceService {
       return this.getRun(id);
     }
     const unattended = !manual && sched!.unattended && plan.services.every((s) => s.unattended.eligible);
+    // M-02: a refused start-now must not leave an approvable orphan run behind
+    if (req.startNow && (this.d.ops.isLocked('maintenance') || this.d.runs.running()))
+      throw conflict('conflict', 'Another maintenance run is in progress (one run at a time)');
     this.d.runs.create({
       ...common,
       status: 'awaiting_approval',

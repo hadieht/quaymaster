@@ -283,9 +283,16 @@ export class AuthService {
   async changePassword(ctx: AuthContext, current: string, next: string): Promise<void> {
     if (!ctx?.user) throw new AppError(401, 'unauthorized', 'Authentication required');
     PasswordService.validateStrength(next);
+    // M-04: the "current password" check is a password oracle for anyone holding a session cookie;
+    // throttle it per (account, session) with the same limiter as login.
+    const key = `pw:${ctx.session.id_hash}`;
+    this.d.limiter.beforeAttempt(ctx.user.username, key);
     if (!(await this.d.passwords.verify(current, ctx.user.password_hash))) {
+      const delay = this.d.limiter.onFailure(ctx.user.username, key);
+      if (delay > 0) await this.sleep(delay);
       throw new AppError(403, 'forbidden', 'Current password is incorrect');
     }
+    this.d.limiter.onSuccess(ctx.user.username, key);
     this.d.users.setPasswordHash(ctx.user.id, await this.d.passwords.hash(next));
     const gone = this.d.sessions.deleteForUser(ctx.user.id, ctx.session.id_hash);
     if (gone.length) this.emit({ sessionIdHashes: gone });

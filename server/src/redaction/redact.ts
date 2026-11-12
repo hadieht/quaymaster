@@ -14,7 +14,7 @@ export const SECRET_KEY_RE =
 
 /** Keys that match the secret pattern but are known to be harmless and useful to show. */
 const SAFE_KEY_RE =
-  /^(sandboxkey|confighash|planhash|fromimageid|toimageid|com\.docker\.compose\.(config-hash|image)|org\.opencontainers\.image\..+)$/i;
+  /^(sandboxkey|confighash|planhash|approvedplanhash|fromimageid|toimageid|com\.docker\.compose\.(config-hash|image)|org\.opencontainers\.image\..+)$/i;
 
 /** Query-parameter names masked in URLs (a superset of the key rules). */
 const QUERY_SECRET_RE = new RegExp(`${SECRET_KEY_RE.source}|^sig$|^s?sig(nature)?$|^code$`, 'i');

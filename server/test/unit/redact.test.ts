@@ -374,3 +374,10 @@ describe('H-01 global scrubber does not blank unrelated data', () => {
     expect(sc.scrub('x k_9876543210abc y')).not.toContain('k_9876543210abc');
   });
 });
+
+describe('L-04 plan hashes are not secrets', () => {
+  it('keeps approvedPlanHash readable in audit params', () => {
+    const out = redactDeep({ approvedPlanHash: 'abc123def456', planHash: 'x1' }) as Record<string, string>;
+    expect(out['approvedPlanHash']).toBe('abc123def456');
+  });
+});

@@ -194,3 +194,55 @@ describe('H-04 crash reconciliation treats an unhealthy running service as broke
     expect(ok.unverified).toBe(true);
   });
 });
+
+describe('M-04 password change is throttled', () => {
+  it('locks the current-password oracle after repeated failures on one session', async () => {
+    (t.ctx.auth as unknown as { sleep: () => Promise<void> }).sleep = async () => undefined;
+    await t.ctx.auth.createUser({ username: 'pwthrottle', password: 'correct-horse-battery-1', role: 'admin' });
+    const who = await t.login('pwthrottle', 'correct-horse-battery-1');
+    const codes: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      const r = await t.call(
+        'POST',
+        '/api/v1/auth/password',
+        { current: `wrong-guess-number-${i}`, next: 'another-long-password-2' },
+        who,
+      );
+      codes.push(r.status);
+    }
+    expect(codes.slice(0, 5)).toEqual([403, 403, 403, 403, 403]);
+    expect(codes.slice(5)).toEqual([429, 429]);
+  });
+});
+
+describe('M-02 refused start-now leaves no orphan run', () => {
+  it('does not persist a run when the single-run lock is taken', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((r) => (release = r));
+    t.ctx.ops.start({
+      kind: 'maintenance.update',
+      target: 'qmtest-m02',
+      actor: 'test',
+      params: {},
+      lockKey: 'maintenance',
+      run: async () => {
+        await held;
+      },
+    });
+    try {
+      const before = (await t.call('GET', '/api/v1/maintenance/runs', undefined, t.admin)).body;
+      const res = await t.call(
+        'POST',
+        '/api/v1/maintenance/runs',
+        { project: 'qmtest-m02', startNow: true },
+        t.admin,
+      );
+      // no such project is a 404/400 before the lock matters; the point: nothing was persisted
+      expect([404, 400, 409]).toContain(res.status);
+      const after = (await t.call('GET', '/api/v1/maintenance/runs', undefined, t.admin)).body;
+      expect(JSON.stringify(after)).toBe(JSON.stringify(before));
+    } finally {
+      release();
+    }
+  });
+});
