@@ -156,7 +156,7 @@ container, no external database.
 Requirements: Linux host, Docker Engine with the Compose plugin, and a directory that holds your Compose projects.
 
 ```bash
-git clone https://github.com/<your-github-user>/quaymaster.git
+git clone https://github.com/hadieht/quaymaster.git
 cd quaymaster
 
 docker build -t quaymaster:dev .

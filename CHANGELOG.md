@@ -37,4 +37,4 @@ First release.
 See [README.md](README.md#limitations-and-roadmap). Deferred audit findings are recorded in
 [docs/DECISIONS.md](docs/DECISIONS.md).
 
-[0.1.0]: https://github.com/<your-github-user>/quaymaster/releases/tag/v0.1.0
+[0.1.0]: https://github.com/hadieht/quaymaster/releases/tag/v0.1.0

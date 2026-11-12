@@ -17,7 +17,7 @@ Quaymaster needs access to the Docker socket, which is root-equivalent on the ho
 ## 1. Get the code and build the image
 
 ```bash
-git clone https://github.com/<your-github-user>/quaymaster.git
+git clone https://github.com/hadieht/quaymaster.git
 cd quaymaster
 docker build -t quaymaster:dev .
 ```
@@ -120,7 +120,7 @@ network's subnet. Never use `true`, `*` or `0.0.0.0/0`; Quaymaster rejects them.
 ## Native install (systemd)
 
 ```bash
-git clone https://github.com/<your-github-user>/quaymaster.git && cd quaymaster
+git clone https://github.com/hadieht/quaymaster.git && cd quaymaster
 npm ci && npm run build
 
 sudo useradd --system --home /var/lib/quaymaster --shell /usr/sbin/nologin -G docker quaymaster

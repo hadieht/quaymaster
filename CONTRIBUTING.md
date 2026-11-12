@@ -9,7 +9,7 @@ Requirements: Node.js 22+, npm, Docker with the Compose plugin, a local `alpine:
 tests) Chromium via `npx playwright install chromium`.
 
 ```bash
-git clone https://github.com/<your-github-user>/quaymaster.git
+git clone https://github.com/hadieht/quaymaster.git
 cd quaymaster
 npm ci
 npm run build

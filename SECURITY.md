@@ -7,7 +7,7 @@ Quaymaster controls the Docker daemon, so security reports are taken seriously.
 Please **do not open a public issue** for a vulnerability.
 
 Use GitHub's private vulnerability reporting: open the repository's **Security** tab, then **Report a vulnerability**
-(`https://github.com/<your-github-user>/quaymaster/security/advisories/new`).
+(`https://github.com/hadieht/quaymaster/security/advisories/new`).
 
 Include:
 
