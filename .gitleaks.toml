@@ -1,0 +1,25 @@
+# Gitleaks configuration for Quaymaster.
+# Start from the full default ruleset; nothing is disabled globally.
+[extend]
+useDefault = true
+
+# Quaymaster redacts secrets, so its redaction tests and one redaction fixture
+# must contain fake secret-looking strings. Each allowlist below is limited to
+# exact files AND exact rules. A secret of any kind anywhere else, or a rule not
+# listed here (private keys, cloud tokens, ...) in these files, still fails the scan.
+# All values in these files are invented test data, not credentials.
+
+[[allowlists]]
+description = "Fake secrets used as input for the redaction unit tests"
+condition = "AND"
+paths = [
+  '''^server/test/unit/redact\.test\.ts$''',
+  '''^server/test/unit/notifications\.test\.ts$''',
+]
+targetRules = ["generic-api-key", "curl-auth-user", "curl-auth-header", "jwt"]
+
+[[allowlists]]
+description = "Fake label secret in the redaction (RT-04) compose fixture"
+condition = "AND"
+paths = ['''^test-fixtures/stacks/qmtest-secrets/compose\.yaml$''']
+targetRules = ["generic-api-key"]
