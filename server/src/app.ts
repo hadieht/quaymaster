@@ -13,6 +13,7 @@ import { registerAuthRoutes } from './routes/auth.js';
 import { registerComposeRoutes } from './routes/compose.js';
 import { registerContainerRoutes } from './routes/containers.js';
 import { registerInventoryRoutes } from './routes/inventory.js';
+import { registerStorageRoutes } from './routes/storage.js';
 import { registerMiscRoutes } from './routes/misc.js';
 import { registerMaintenanceRoutes } from './routes/maintenance.js';
 import { registerNotificationRoutes } from './routes/notifications.js';
@@ -279,6 +280,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       registerContainerRoutes(api, ctx);
       registerComposeRoutes(api, ctx);
       registerInventoryRoutes(api, ctx);
+      registerStorageRoutes(api, ctx);
       registerMiscRoutes(api, ctx);
       registerUpdateRoutes(api, ctx);
       registerMaintenanceRoutes(api, ctx);

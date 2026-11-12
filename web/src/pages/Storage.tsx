@@ -1,12 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { q } from '@/api/hooks';
-import type { NetworkSummary, VolumeSummary } from '@/api/types';
+import { q, useInvalidateDocker } from '@/api/hooks';
+import type { NetworkSummary, ReclaimReport, VolumeSummary } from '@/api/types';
+import {
+  ReclaimSummary,
+  RemoveNetworkDialog,
+  RemoveVolumeDialog,
+  StorageCleanupDialog,
+} from '@/components/domain/StorageRemoval';
 import { ScopeNotice } from '@/components/layout/AppShell';
 import {
   Badge,
+  Button,
   Card,
+  Notice,
+  useToast,
   DataTable,
   ErrorState,
   LoadingState,
@@ -17,6 +26,9 @@ import {
   type Column,
 } from '@/components/ui';
 import { bytes, dateTime } from '@/lib/format';
+import { useGate } from '@/state/auth';
+
+const PREDEFINED = new Set(['bridge', 'host', 'none']);
 
 export default function StoragePage() {
   const [tab, setTab] = useState<'volumes' | 'networks'>('volumes');
@@ -25,6 +37,17 @@ export default function StoragePage() {
   const volumes = useQuery(q.volumes());
   const networks = useQuery(q.networks());
   const df = useQuery(q.df());
+  const gate = useGate();
+  const toast = useToast();
+  const invalidate = useInvalidateDocker();
+  const writeBlock = gate();
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [delVolume, setDelVolume] = useState<VolumeSummary | null>(null);
+  const [delNetwork, setDelNetwork] = useState<NetworkSummary | null>(null);
+  const [reclaimed, setReclaimed] = useState<{
+    title: string;
+    reclaim: ReclaimReport;
+  } | null>(null);
   const n = search.trim().toLowerCase();
 
   const vrows = useMemo(
@@ -111,6 +134,25 @@ export default function StoragePage() {
           <Badge tone="inactive">unused</Badge>
         ),
     },
+    {
+      key: 'remove',
+      header: '',
+      align: 'right',
+      cell: (v) => (
+        <Button
+          size="sm"
+          icon="trash"
+          aria-label={`Delete volume ${v.name}`}
+          disabledReason={
+            writeBlock ??
+            (v.usedBy.length ? `In use by ${v.usedBy.join(', ')} (a stopped container counts).` : null)
+          }
+          onClick={() => setDelVolume(v)}
+        >
+          Delete
+        </Button>
+      ),
+    },
   ];
 
   const ncols: Column<NetworkSummary>[] = [
@@ -159,6 +201,29 @@ export default function StoragePage() {
           <Badge tone="inactive">unused</Badge>
         ),
     },
+    {
+      key: 'remove',
+      header: '',
+      align: 'right',
+      cell: (x) => (
+        <Button
+          size="sm"
+          icon="trash"
+          aria-label={`Remove network ${x.name}`}
+          disabledReason={
+            writeBlock ??
+            (PREDEFINED.has(x.name)
+              ? 'Predefined Docker network.'
+              : x.containers.length
+                ? `Containers are attached: ${x.containers.join(', ')}.`
+                : null)
+          }
+          onClick={() => setDelNetwork(x)}
+        >
+          Remove
+        </Button>
+      ),
+    },
   ];
 
   function volSize(v: VolumeSummary): number | null {
@@ -170,9 +235,19 @@ export default function StoragePage() {
     <>
       <PageHeader
         title="Volumes & Networks"
-        description="Read-only inventory. Quaymaster never removes volumes or networks."
+        description="Unused volumes and networks can be removed one by one or in bulk after a preview. Removing a volume permanently deletes its data."
+        actions={
+          <Button icon="trash" disabledReason={writeBlock} onClick={() => setCleanupOpen(true)}>
+            Clean up…
+          </Button>
+        }
       />
       <ScopeNotice />
+      {reclaimed ? (
+        <Notice tone="healthy" title={reclaimed.title} className="mb-4">
+          <ReclaimSummary reclaim={reclaimed.reclaim} />
+        </Notice>
+      ) : null}
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-border p-3">
           <Segmented
@@ -228,6 +303,42 @@ export default function StoragePage() {
           />
         )}
       </Card>
+      {cleanupOpen ? (
+        <StorageCleanupDialog
+          open
+          onClose={() => setCleanupOpen(false)}
+          onDone={(r) => {
+            invalidate();
+            setReclaimed({ title: `Cleanup removed ${r.removed.length} item(s)`, reclaim: r.reclaim });
+            toast.success(
+              'Cleanup finished',
+              `${r.removed.length} removed, ${bytes(r.reclaim.reclaimedBytes)} reclaimed`,
+            );
+          }}
+        />
+      ) : null}
+      {delVolume ? (
+        <RemoveVolumeDialog
+          open
+          volume={delVolume}
+          onClose={() => setDelVolume(null)}
+          onDone={(r) => {
+            invalidate();
+            setReclaimed({ title: `Volume ${r.name} deleted`, reclaim: r.reclaim });
+          }}
+        />
+      ) : null}
+      {delNetwork ? (
+        <RemoveNetworkDialog
+          open
+          network={delNetwork}
+          onClose={() => setDelNetwork(null)}
+          onDone={(r) => {
+            invalidate();
+            toast.success('Network removed', r.name);
+          }}
+        />
+      ) : null}
     </>
   );
 }

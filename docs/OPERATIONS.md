@@ -144,6 +144,41 @@ Rollback images are tagged `quaymaster-rollback/<hash>:<run-id>` and protected f
 Staged pulls use `quaymaster-staged/…`. List them with `docker images 'quaymaster-*'`. Expired rollback tags are an image-cleanup category
 (preview first, see Images); once removed, the previous image can only be recovered from the registry.
 
+## Cleaning up images, networks and volumes
+
+Admins can remove items from the **Images** and **Volumes & Networks** pages, one by one or with **Clean up…**.
+Bulk cleanup always shows a preview first (what, how big, what is kept and why); the preview expires after 10 minutes
+and only what it lists can be removed. Everything is re-checked immediately before removal, so something that
+started being used in the meantime is skipped.
+
+| Resource | Removed when                                                                                                  | Never removed                                                                                                                                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Image    | no container (running or stopped) uses it, older than `QM_CLEANUP_MIN_AGE_HOURS`, no Compose project names it | images any container uses, rollback/staged images inside retention, anything outside `QM_MANAGED_SCOPE`                                                                         |
+| Network  | no container is attached or configured for it                                                                 | `bridge`/`host`/`none`, networks of a Compose project that still exists on disk, Quaymaster's own network                                                                       |
+| Volume   | no container (running or stopped) references it                                                               | Quaymaster's own data volume, volumes outside `QM_MANAGED_SCOPE`, volumes of a Compose project that still exists (unless you opt in), anything a stopped container still mounts |
+
+Things to know:
+
+- **Removing a volume deletes its data permanently. It cannot be recovered.** Take a backup first (for example
+  `docker run --rm -v VOLUME:/data -v "$PWD":/backup alpine tar czf /backup/VOLUME.tgz -C /data .`). Quaymaster does
+  not make backups of volumes.
+- Volumes are never part of a cleanup unless you tick them. "Anonymous" volumes (a 64-character hash name, created by
+  `docker run -v /path`) are the default once volumes are enabled; "named" volumes are a separate opt-in and may hold
+  databases of stacks that are only stopped. Typing the exact volume name (single) or `delete N volumes` (bulk) is
+  required for every volume removal.
+- A stopped container counts as a user: its volumes, networks and image are kept. Removing the container first is
+  your decision; Quaymaster's cleanup never removes containers on these pages.
+- An image with several tags can be untagged one tag at a time (the image and its disk usage stay) or removed
+  entirely. Image sizes in the preview count only the layers that image owns; shared layers are freed when the last
+  image using them is removed.
+- After a run, Quaymaster shows the estimate and the measured result: the drop in what Docker accounts for (image
+  layers + volumes) and the change in free space on the Docker disk. The latter is noisy if other things write to the
+  disk. Networks free no space.
+- Docker build cache is not cleaned up by Quaymaster (the Engine cannot restrict a build-cache prune to resources
+  Quaymaster manages). Use `docker builder prune` yourself if you want that.
+- Read-only mode (`QM_READ_ONLY`) and `QM_MANAGED_SCOPE` refuse removals server-side. Every removal and refusal is in
+  the audit log with the number of bytes.
+
 ## Lost admin access
 
 0.1.0 has no password-reset command. If another admin exists, they can set a new password for you (Settings → Security).

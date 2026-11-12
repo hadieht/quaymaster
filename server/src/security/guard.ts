@@ -241,6 +241,8 @@ export type EnginePermit =
   | { kind: 'image_pull'; repo: string; tag: string }
   | { kind: 'image_tag'; imageId: string; repo: string; tag: string }
   | { kind: 'image_remove'; name: string }
+  | { kind: 'volume_remove'; name: string }
+  | { kind: 'network_remove'; id: string }
   | { kind: 'container_create'; name: string }
   | { kind: 'container_rename'; containerId: string; newName: string }
   | { kind: 'container_restart_policy'; containerId: string }
@@ -269,6 +271,8 @@ const CONTAINER_UPDATE = /^\/containers\/([0-9a-f]{64})\/update$/;
 const NETWORK_ATTACH = /^\/networks\/([^/]+)\/(connect|disconnect)$/;
 const IMAGE_TAG = /^\/images\/(.+)\/tag$/;
 const IMAGE_DELETE = /^\/images\/(.+)$/;
+const VOLUME_DELETE = /^\/volumes\/([^/]+)$/;
+const NETWORK_DELETE = /^\/networks\/([^/]+)$/;
 
 function decode(s: string): string {
   try {
@@ -331,6 +335,21 @@ export function checkEngineRequest(
     const p = permit as Extract<EnginePermit, { kind: 'image_remove' }>;
     if (decode(mm[1] ?? '') !== p.name || q.get('force') === 'true' || q.get('force') === '1')
       return denyPermit(m, pathOnly);
+    return;
+  }
+
+  // ---- volumes / networks: removal by exact name / full ID, never forced, never pruned
+  if (m === 'DELETE' && (mm = VOLUME_DELETE.exec(pathOnly))) {
+    if (!permit || kind !== 'volume_remove') return notAllowListed(m, pathOnly);
+    const p = permit as Extract<EnginePermit, { kind: 'volume_remove' }>;
+    if (decode(mm[1] ?? '') !== p.name || q.get('force') === 'true' || q.get('force') === '1')
+      return denyPermit(m, pathOnly);
+    return;
+  }
+  if (m === 'DELETE' && (mm = NETWORK_DELETE.exec(pathOnly))) {
+    if (!permit || kind !== 'network_remove') return notAllowListed(m, pathOnly);
+    const p = permit as Extract<EnginePermit, { kind: 'network_remove' }>;
+    if (decode(mm[1] ?? '') !== p.id || !FULL_ID_RE.test(p.id)) return denyPermit(m, pathOnly);
     return;
   }
 

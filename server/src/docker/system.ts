@@ -1,7 +1,7 @@
 import { readFileSync, statfsSync } from 'node:fs';
 import os from 'node:os';
 import type Dockerode from 'dockerode';
-import type { HostMetrics } from '@quaymaster/shared';
+import type { HostMetrics, ReclaimReport } from '@quaymaster/shared';
 import type { Config } from '../config/env.js';
 import { redactDeep } from '../redaction/redact.js';
 import { mapDockerError } from './containers.js';
@@ -17,6 +17,67 @@ interface DfContainers {
 }
 interface DfVolumes {
   Volumes?: { Name: string; UsageData?: { Size: number; RefCount: number } }[];
+}
+
+export interface DfMeasure {
+  volumes: Record<string, number>;
+  /** Per image: reported size and the part shared with other images (null = unknown). */
+  images: Record<string, { size: number; shared: number | null }>;
+  layersSize: number;
+  volumesSize: number;
+}
+
+/**
+ * Takes a `/system/df` + free-space snapshot around a removal and builds the report. Failure to
+ * measure never fails the removal: the report then says it fell back to the estimate.
+ */
+export async function measureReclaim<T>(
+  usage: Pick<DiskUsageService, 'measure'>,
+  freeBytes: () => Promise<number | null>,
+  run: (before: DfMeasure | null) => Promise<{
+    value: T;
+    estimatedBytes: number;
+    /** Most this run can have freed (red-team RT3-06); omitted when unknown. */
+    maxBytes?: number;
+  }>,
+): Promise<{ value: T; reclaim: ReclaimReport }> {
+  const snap = async (): Promise<{ df: number | null; free: number | null; m: DfMeasure | null }> => {
+    const [m, free] = await Promise.all([usage.measure().catch(() => null), freeBytes().catch(() => null)]);
+    return { df: m ? m.layersSize + m.volumesSize : null, free, m };
+  };
+  const before = await snap();
+  const { value, estimatedBytes, maxBytes } = await run(before.m);
+  const after = await snap();
+  const dfDelta = before.df !== null && after.df !== null ? Math.max(before.df - after.df, 0) : null;
+  const freeDelta = before.free !== null && after.free !== null ? after.free - before.free : null;
+  const basis: ReclaimReport['basis'] =
+    dfDelta !== null ? 'df' : freeDelta !== null && freeDelta > 0 ? 'statfs' : 'estimate';
+  const measured = basis === 'df' ? (dfDelta ?? 0) : basis === 'statfs' ? (freeDelta ?? 0) : estimatedBytes;
+  // RT3-06: the before/after deltas are host-wide. Another prune, a volume deleted elsewhere or a pull that
+  // finished during the run used to be reported as "reclaimed" by this run (3 GB shown for 0 removals). The
+  // headline can never exceed what the removed items occupied; a low figure is flagged instead of hidden.
+  const capped = maxBytes !== undefined && measured > maxBytes;
+  const low = basis !== 'estimate' && !capped && measured < estimatedBytes;
+  return {
+    value,
+    reclaim: {
+      estimatedBytes,
+      freeSpaceDeltaBytes: freeDelta,
+      dfDeltaBytes: dfDelta,
+      reclaimedBytes: capped ? (maxBytes ?? 0) : measured,
+      basis,
+      note:
+        'Reclaimed = what Docker accounts for (image layers + volumes) before minus after, capped at the size of ' +
+        'what was actually removed. Free-space change on the Docker root is shown too, but other processes writing ' +
+        'to the disk make it noisy. Layers shared with other images are freed only when the last image using them ' +
+        'is removed.',
+      caveat: capped
+        ? 'Docker usage dropped by more than the removed items occupied: other activity ran meanwhile, so the figure is capped.'
+        : low
+          ? 'Docker usage grew meanwhile (for example a pull), so the measured figure is lower than the estimate.'
+          : null,
+    },
+  };
 }
 
 export interface DiskUsage {
@@ -60,6 +121,28 @@ export class DiskUsageService {
         (e, data) => (e ? reject(mapDockerError(e)) : resolve(data)),
       );
     });
+  }
+
+  /**
+   * Uncached `/system/df` for images and volumes (one request per type, sequential). Used by cleanup
+   * previews (per-item sizes) and to measure what a removal actually freed. Slow on big hosts: only
+   * call it for an explicit preview/removal, never from a poll.
+   */
+  async measure(): Promise<DfMeasure> {
+    const images = await this.dial<DfImages>('image');
+    const volumes = await this.dial<DfVolumes>('volume');
+    const vol: Record<string, number> = {};
+    for (const v of volumes.Volumes ?? [])
+      if (v.UsageData && v.UsageData.Size >= 0) vol[v.Name] = v.UsageData.Size;
+    const img: Record<string, { size: number; shared: number | null }> = {};
+    for (const i of images.Images ?? [])
+      img[i.Id] = { size: i.Size, shared: i.SharedSize >= 0 ? i.SharedSize : null };
+    return {
+      volumes: vol,
+      images: img,
+      layersSize: images.LayersSize ?? 0,
+      volumesSize: Object.values(vol).reduce((s, n) => s + n, 0),
+    };
   }
 
   async get(opts: { force?: boolean } = {}): Promise<DiskUsage | null> {

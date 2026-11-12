@@ -292,11 +292,54 @@ automatic unless the policy says so.
 
 ### 7.6 Cleanup
 Preview first, always. Categories: dangling images, unused images (no
-container, running or stopped), stopped containers, unused volumes/networks
-(report only by default). Never removed: images used by any container,
-rollback-tagged images inside retention (default 7 days), anything created
-less than a configurable age ago. No scheduled automatic deletion in v1 except
-expired rollback tags; scheduled cleanup produces a report + notification.
+container, running or stopped), stopped containers, unused networks, unused
+anonymous volumes and unused named volumes. Never removed: images used by any
+container, rollback-tagged images inside retention (default 7 days), anything
+created less than a configurable age ago. No scheduled automatic deletion in v1
+except expired rollback tags; scheduled cleanup produces a report + notification.
+
+**Removal of images, networks and volumes (amends RT-24, see DECISIONS.md
+"Storage cleanup").** Every list page can remove a single item, and
+the Images and Volumes & Networks pages offer a bulk "clean up" built on the
+same preview -> expiring preview token -> typed confirmation -> execute flow.
+Rules, all enforced in the service layer (never in the UI):
+
+- *Preview token.* The server computes candidates and stores them under a random
+  `previewId` (10 minutes, bound to the admin who created it, single use). Execute
+  accepts only that id plus the confirmation text, never a candidate list. Every
+  candidate is re-inspected right before it is removed (TOCTOU): anything that
+  became used, was recreated under the same name (volumes compare `CreatedAt`),
+  left the scope or changed kind is skipped and reported.
+- *Images.* Not used by any container (running or stopped), not a rollback/staged
+  image within retention, not named by a discovered Compose project, older than
+  the minimum age, in scope. Dangling-only and all-unused are separate
+  categories. A multi-tag image can be untagged one tag at a time (the image
+  stays) or deleted entirely; the result says which happened.
+- *Networks.* Not `bridge`/`host`/`none`/swarm-internal, no attached or configured
+  container (stopped containers count), not defined by a Compose project that still
+  exists on disk, not Quaymaster's own network, in scope.
+- *Volumes (data loss).* No container references it, stopped containers included
+  (the container list is read unfiltered by `QM_VISIBLE_SCOPE`); never Quaymaster's own volumes; in scope
+  (name and project label); a volume of a Compose project that still exists on disk,
+  whose config declares it, or whose project Quaymaster cannot discover at all, is
+  kept unless the admin opts in. Volumes and networks outside `QM_VISIBLE_SCOPE`
+  are neither listed nor removable. Anonymous
+  (64-hex name) and named volumes are separate categories, and **no volume
+  category is selected by default**. Every volume removal needs a typed confirmation:
+  the exact volume name (single) or `delete <n> volume(s)` (bulk). Engine calls
+  carry a name-bound permit and are never forced, so Docker itself also refuses a volume in use.
+- *Refusals* reuse the existing error codes (`read_only`, `out_of_scope`,
+  `self_protected`, `confirmation_required`, `conflict`).
+- *Storage reporting.* The preview shows per-item sizes: volumes from `UsageData`,
+  images as size minus layers shared with other images (shared layers are freed only
+  when the last image using them goes). Networks free nothing. After each run the
+  result reports the estimate next to the measured figure (decrease of the layers +
+  volumes accounted by `/system/df`, plus the change of free space on the Docker
+  root).
+- *Build cache is not cleaned up.* The Engine's build-cache prune cannot be filtered by
+  label, so it cannot be restricted to what Quaymaster manages; it is therefore not offered.
+- *Audit.* Every removal (and every refusal) is an audit record with actor, target,
+  outcome and bytes. Containers are never touched by these flows.
 
 ## 8. Notifications
 `NotificationChannel` interface (`id`, `configSchema`, `send(event)`, `test()`)

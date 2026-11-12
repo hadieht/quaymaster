@@ -105,6 +105,7 @@ export class VolumeService {
         labels: redactLabels(labels),
         composeProject: labels[LABEL.project] ?? null,
         usedBy: users,
+        anonymous: /^[0-9a-f]{64}$/.test(v.Name) && labels[LABEL.project] === undefined,
         size: sizes[v.Name] ?? null,
       };
     });

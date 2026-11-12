@@ -47,6 +47,7 @@ import { NotificationService } from './notifications/service.js';
 import { RegistryClient } from './registry/client.js';
 import { cacheKey, parseImageRef } from './registry/reference.js';
 import { CleanupService } from './updates/cleanup.js';
+import { StorageCleanupService, type ComposeOwnership } from './docker/storage-cleanup.js';
 import { UpdateService } from './updates/detector.js';
 import { Guard } from './security/guard.js';
 import { detectSelf } from './security/self.js';
@@ -95,6 +96,7 @@ export interface AppContext {
   imageOps: ImageOps;
   updates: UpdateService;
   cleanup: CleanupService;
+  storage: StorageCleanupService;
   planner: Planner;
   executor: RunExecutor;
   maintenance: MaintenanceService;
@@ -333,9 +335,45 @@ async function build(
       }
       return refs;
     },
+    usage: disk,
+    freeBytes: async () => (await system.host().catch(() => null))?.dockerRoot?.free ?? null,
     minAgeMs: config.cleanupMinAgeMs,
     retentionMs: config.rollbackRetentionMs,
     log,
+  });
+  const storage = new StorageCleanupService({
+    docker,
+    guard,
+    audit,
+    usage: disk,
+    freeBytes: async () => (await system.host().catch(() => null))?.dockerRoot?.free ?? null,
+    composeOwnership: async () => {
+      const own: ComposeOwnership = {
+        ok: true,
+        projects: new Set(),
+        volumes: new Map(),
+        networks: new Map(),
+      };
+      try {
+        for (const p of await compose.discover()) {
+          own.projects.add(p.name);
+          if (p.level !== 'full') continue;
+          try {
+            const cfg = (await compose.resolvedConfig(p.name)).config;
+            for (const [key, v] of Object.entries(cfg.volumes ?? {}))
+              own.volumes.set(v?.name ?? `${p.name}_${key}`, p.name);
+            for (const [key, v] of Object.entries(cfg.networks ?? {}))
+              own.networks.set(v?.name ?? `${p.name}_${key}`, p.name);
+          } catch {
+            // a project whose config does not resolve still exists: its labelled resources stay protected
+          }
+        }
+      } catch {
+        own.ok = false;
+      }
+      return own;
+    },
+    minAgeMs: config.cleanupMinAgeMs,
   });
   const maintenance = new MaintenanceService({
     runs: runsRepo,
@@ -442,6 +480,7 @@ async function build(
     imageOps,
     updates,
     cleanup,
+    storage,
     planner,
     executor,
     maintenance,

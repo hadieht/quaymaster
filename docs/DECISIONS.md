@@ -120,3 +120,49 @@ NOTE items RT-31 (version negotiation), RT-33 (Compose versions shown per projec
 
 - **M-06 history rewrite.** The owner approved rewriting history to drop two real container names from earlier review text. Done with `git filter-repo --replace-text` after a `git bundle` backup outside the repo; all commit hashes changed. RFC1918 literals in unit tests and the fake credentials in redaction tests are deliberate fixtures (gitleaks reports 8 findings, all in those files).
 - **Timing-sensitive test.** `maintenance.int.test.ts` "critical target is never auto-updated" failed once when the full suite ran alongside a typecheck/lint on the 2-core host (2 runs instead of 1) and passed in isolation and when the file was re-run. Treat as load-sensitive; do not run other jobs during the suite.
+
+## Storage cleanup: removal of images, networks and volumes
+
+- **Deliberate reversal of "report only".** RT-24 and ARCHITECTURE 7.6 made volumes and networks report-only and said
+  volume removal is single-volume only. The owner now explicitly asked to clean up images, networks and volumes and to
+  free their storage. RT-24's concern (a stopped stack's database looks unused) is handled by safeguards instead of a ban:
+  no volume category is selected by default; anonymous and named volumes are separate categories; named volumes need an
+  explicit opt-in; a volume of a Compose project that still exists on disk or whose config declares it is kept unless a
+  second opt-in is given; every volume removal needs a typed confirmation (exact name, or `delete N volume(s)`); a
+  stopped container counts as a user. A volume labelled with a Compose project that Quaymaster cannot discover (no
+  containers left, directory outside `QM_STACK_PATHS`, compose CLI unavailable, or project outside `QM_VISIBLE_SCOPE`)
+  is treated like an existing project and needs the same opt-in: "not discovered" is not proof of "deleted from disk"
+  (red-team RT3-01, docs/reviews/03-cleanup-redteam.md). Known residual risk: an unlabelled named volume (plain
+  `docker run -v name:/x`) is removable by design once its owner opted in and typed the phrase.
+- **Same flow as image cleanup, but separate endpoints.** `/storage/cleanup/{preview,execute}` is its own service
+  (`StorageCleanupService`) instead of more categories on `/images/cleanup/*`: the confirmation differs (typed phrase
+  versus echoing the preview id) and previews must never mix data-loss and routine items by accident.
+- **Typed confirmation for anonymous volumes too.** The brief required it only for named volumes. Anonymous volumes can
+  hold data (`docker run -v /data` without `--rm -v`), so the phrase is required whenever any volume is in the
+  preview. This is stricter than asked.
+- **"Count word" for bulk** is implemented as `delete <n> volume(s)` (for example `delete 3 volumes`).
+- **Execute re-validates, it does not trust the preview.** Volumes compare `CreatedAt` with the preview (a volume
+  deleted and recreated under the same name is skipped), re-read the container list unfiltered by `QM_VISIBLE_SCOPE`,
+  and repeat the scope, self-protection and Compose checks. Stopped containers are matched by their mounts and by
+  network name/`HostConfig.NetworkMode`: the daemon-side `network` filter misses stopped containers (their
+  NetworkID is empty), which the integration test caught (it removed a network a stopped container was configured
+  for before the fix).
+- **Engine permits.** `volume_remove {name}` and `network_remove {id}` (full 64-hex id only) join `image_remove`; no
+  force, prune stays off the allow-list. Docker's own refusal for a volume in use is a second line of defence.
+- **Scope and anonymous volumes.** With `QM_MANAGED_SCOPE` set, anonymous (hash-named) volumes cannot be attributed to
+  the scope by name and are therefore never removable; this is intentional.
+- **Last known user** of a volume is only what Docker records: the Compose project/volume labels. An unused volume has
+  by definition no container, so the UI says "unknown" otherwise. No usage history is stored (would need a migration).
+- **Minimum age** (`QM_CLEANUP_MIN_AGE_HOURS`) applies to bulk volume and network cleanup (protects a volume that a
+  `docker run` has just created); explicit single removals ignore it.
+- **Reclaimed storage.** Estimate = sum of volume `UsageData.Size` and per-image `Size - SharedSize`. Measured = the
+  decrease of (`LayersSize` + volume sizes) from `/system/df`, taken before and after (each call can take a while on big
+  hosts, so it runs only for explicit previews/removals), plus the statfs free-space delta, which is shown but noisy.
+  The df delta is the headline figure; if df cannot be read the report falls back to statfs, then to the estimate and
+  says so.
+- **Build cache: not implemented.** The Engine's `POST /build/prune` filters (`until`, `id`, `type`, `inuse`, ...)
+  cannot be restricted by label, so it cannot be limited to Quaymaster-managed or test resources. An unfiltered prune
+  is forbidden by the repository rules and would also delete build cache that belongs to others, so the category is
+  not offered. `docker builder prune` remains a manual step (documented).
+- **Not done:** per-item removal for networks does not offer an opt-in for Compose-defined networks (networks hold no
+  data and `compose up` recreates them; the bulk and single paths both keep them).

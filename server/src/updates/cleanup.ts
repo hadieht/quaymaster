@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type Dockerode from 'dockerode';
 import type {
+  ResourceRemoveResult,
   CleanupCandidate,
   CleanupCategory,
   CleanupPreview,
@@ -11,10 +12,11 @@ import type { AuditService } from '../audit/audit.js';
 import type { RollbackRepo, StagedRepo } from '../db/updates.js';
 import type { Actor, ContainerService } from '../docker/containers.js';
 import type { ImageOps } from '../docker/imageops.js';
-import { LABEL } from '../docker/model.js';
+import { LABEL, isSafeRef } from '../docker/model.js';
+import { measureReclaim, type DfMeasure, type DiskUsageService } from '../docker/system.js';
 import { cacheKey, isInternalTag, parseImageRef, repoBaseName } from '../registry/reference.js';
 import type { Guard } from '../security/guard.js';
-import { AppError, badRequest } from '../util/errors.js';
+import { AppError, badRequest, notFound } from '../util/errors.js';
 import type { Logger } from '../util/logger.js';
 
 export const ALL_CATEGORIES: CleanupCategory[] = [
@@ -29,6 +31,8 @@ const PREVIEW_TTL_MS = 10 * 60_000;
 interface StoredPreview {
   preview: CleanupPreview;
   actor: string;
+  /** Needed to repeat the scope check at execute time (an untagged image is in scope only via the filter). */
+  labelFilter: string | null;
 }
 
 /**
@@ -37,7 +41,7 @@ interface StoredPreview {
  * before it is removed. Never removed: images used by any container, images referenced by a
  * discovered Compose project, rollback / staged tags within retention, anything younger than the
  * minimum age, anything outside QM_MANAGED_SCOPE, the Quaymaster container itself. Volumes and
- * networks are report-only: Quaymaster never deletes them in bulk.
+ * networks are not handled here (see StorageCleanupService); they are only counted in `reportOnly`.
  */
 export class CleanupService {
   private readonly previews = new Map<string, StoredPreview>();
@@ -53,6 +57,8 @@ export class CleanupService {
       staged: StagedRepo;
       /** Image references (cache keys) named in the Compose files of all discovered projects. */
       projectImageRefs: () => Promise<Set<string>>;
+      usage: Pick<DiskUsageService, 'measure'>;
+      freeBytes: () => Promise<number | null>;
       minAgeMs: number;
       retentionMs: number;
       log: Logger;
@@ -100,9 +106,13 @@ export class CleanupService {
     const candidates: CleanupCandidate[] = [];
     const protectedList: CleanupProtected[] = [];
     const containers = await this.d.containers.listRaw(true);
-    const usedImageIds = new Set(containers.map((c) => c.ImageID));
+    // Red-team RT3-03: "in use" must be computed from EVERY container on the daemon. `listRaw` is filtered by
+    // QM_VISIBLE_SCOPE, so an image used only by an invisible (stopped) container looked unused and execute
+    // untagged it tag by tag until Docker refused the last one. Visibility only limits what we show/remove.
+    const allContainers = await this.d.docker.listContainers({ all: true });
+    const usedImageIds = new Set(allContainers.map((c) => c.ImageID));
     const usedByName = new Map<string, string>();
-    for (const c of containers)
+    for (const c of allContainers)
       usedByName.set(c.ImageID, (c.Names?.[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''));
     const referenced = await this.d.projectImageRefs();
     const rollbackActive = new Map(this.d.rollback.active().map((r) => [r.tag, r]));
@@ -117,6 +127,7 @@ export class CleanupService {
       (c) => c === 'dangling_images' || c === 'unused_images' || c === 'expired_rollback',
     );
     const images = wantImages ? await this.d.docker.listImages({ all: false }) : [];
+    const df = wantImages ? await this.d.usage.measure().catch(() => null) : null;
     for (const img of images) {
       const tags = (img.RepoTags ?? []).filter((t) => t !== '<none>:<none>');
       const isDangling = tags.length === 0;
@@ -211,9 +222,12 @@ export class CleanupService {
         id: `image:${img.Id}`,
         category,
         name: isDangling ? name : tags.join(', '),
-        size: img.Size,
+        size: uniqueSize(img.Id, img.Size, df),
+        virtualSize: img.Size,
         ageHours: Math.round((now - refTime) / 3_600_000),
-        note: isDangling ? 'untagged image' : 'tagged image that no container uses',
+        note:
+          (isDangling ? 'untagged image' : 'tagged image that no container uses') +
+          '; frees its own layers only, shared layers stay until the last image using them goes',
       });
     }
 
@@ -258,11 +272,13 @@ export class CleanupService {
       }
     }
 
-    // report only: volumes and networks are never deleted in bulk (RT-24)
+    // only counted here; their removal is StorageCleanupService (docs/DECISIONS.md, "Storage cleanup")
     const [vols, nets] = await Promise.all([this.d.docker.listVolumes(), this.d.docker.listNetworks()]);
-    const mounted = new Set(containers.flatMap((c) => (c.Mounts ?? []).map((m) => m.Name).filter(Boolean)));
+    const mounted = new Set(
+      allContainers.flatMap((c) => (c.Mounts ?? []).map((m) => m.Name).filter(Boolean)),
+    );
     const netUsed = new Set(
-      containers.flatMap((c) => Object.values(c.NetworkSettings?.Networks ?? {}).map((n) => n.NetworkID)),
+      allContainers.flatMap((c) => Object.values(c.NetworkSettings?.Networks ?? {}).map((n) => n.NetworkID)),
     );
     const unusedVolumes = (vols.Volumes ?? [])
       .filter((v) => !mounted.has(v.Name) && this.d.guard.inScope(v.Name))
@@ -285,7 +301,7 @@ export class CleanupService {
       totalBytes: candidates.reduce((s, c) => s + (c.size ?? 0), 0),
     };
     for (const [id, p] of this.previews) if (Date.parse(p.preview.expiresAt) < now) this.previews.delete(id);
-    this.previews.set(preview.previewId, { preview, actor: actor.name });
+    this.previews.set(preview.previewId, { preview, actor: actor.name, labelFilter });
     this.d.audit.record({
       actor: actor.name,
       ip: actor.ip,
@@ -328,42 +344,84 @@ export class CleanupService {
     const skipped: CleanupResult['skipped'] = [];
     let reclaimed = 0;
     const t0 = this.now();
-    const containers = await this.d.containers.listRaw(true);
-    const usedNow = new Set(containers.map((c) => c.ImageID));
-    for (const c of stored.preview.candidates) {
-      const kind = c.id.slice(0, c.id.indexOf(':'));
-      const ref = c.id.slice(c.id.indexOf(':') + 1);
-      try {
-        if (kind === 'image') {
-          // re-verify right before removal: a container may have started on it since the preview
-          if (usedNow.has(ref)) throw new Error('now used by a container');
-          const info = await this.d.images.inspect(ref);
-          if (!info) throw new Error('already gone');
-          if ((info.RepoTags ?? []).some(isInternalTag)) throw new Error('carries a rollback/staged tag');
-          for (const t of info.RepoTags ?? []) await this.d.images.remove(t);
-          if ((await this.d.images.inspect(ref)) !== null) await this.d.images.remove(ref);
-        } else if (kind === 'tag') {
-          const rb = this.d.rollback.get(ref);
-          if (rb && rb.expires_at > this.now()) throw new Error('rollback point is still within retention');
-          const st = this.d.staged.get(ref);
-          if (st && st.created_at + this.d.retentionMs > this.now())
-            throw new Error('staged image is still within retention');
-          await this.d.images.remove(ref);
-          this.d.rollback.release(ref);
-          this.d.staged.delete(ref);
-        } else if (kind === 'container') {
-          const cont = containers.find((x) => x.Id === ref);
-          if (!cont) throw new Error('already gone');
-          const name = (cont.Names?.[0] ?? '').replace(/^\//, '');
-          if (!['exited', 'created', 'dead'].includes(cont.State)) throw new Error('not stopped anymore');
-          await this.d.containers.act(ref, 'remove', { confirm: name }, actor);
+    const { reclaim } = await measureReclaim(this.d.usage, this.d.freeBytes, async () => {
+      // unfiltered by QM_VISIBLE_SCOPE for the in-use re-check (RT3-03); `containers` stays the visible list
+      const containers = await this.d.containers.listRaw(true);
+      const allNow = await this.d.docker.listContainers({ all: true });
+      const usedNow = new Set(allNow.map((c) => c.ImageID));
+      const referencedNow = await this.d.projectImageRefs();
+      const rollbackIdsNow = new Set(
+        this.d.rollback
+          .active()
+          .filter((r) => r.expires_at > this.now())
+          .map((r) => r.image_id),
+      );
+      for (const c of stored.preview.candidates) {
+        const kind = c.id.slice(0, c.id.indexOf(':'));
+        const ref = c.id.slice(c.id.indexOf(':') + 1);
+        try {
+          if (kind === 'image') {
+            // re-verify right before removal: a container may have started on it since the preview
+            if (usedNow.has(ref)) throw new Error('now used by a container');
+            const info = await this.d.images.inspect(ref);
+            if (!info) throw new Error('already gone');
+            const tagsNow = (info.RepoTags ?? []).filter((t) => t !== '<none>:<none>');
+            if (tagsNow.some(isInternalTag)) throw new Error('carries a rollback/staged tag');
+            // RT3-04: the tags are re-read here and ALL of them are removed, so every rule that depends on the
+            // tags is repeated: a tag added since the preview may be outside the scope or named by a project
+            const sp = this.scopeProblem(tagsNow, stored.labelFilter);
+            if (sp) throw new Error(`now ${sp}`);
+            if (rollbackIdsNow.has(ref)) throw new Error('now a rollback point within retention');
+            if (
+              tagsNow.some((t) => {
+                const p = parseImageRef(t);
+                return referencedNow.has(t) || (p !== null && referencedNow.has(cacheKey(p)));
+              })
+            )
+              throw new Error('now referenced by a discovered Compose project');
+            for (const t of tagsNow) await this.d.images.remove(t);
+            if ((await this.d.images.inspect(ref)) !== null) await this.d.images.remove(ref);
+          } else if (kind === 'tag') {
+            const rb = this.d.rollback.get(ref);
+            if (rb && rb.expires_at > this.now()) throw new Error('rollback point is still within retention');
+            const st = this.d.staged.get(ref);
+            if (st && st.created_at + this.d.retentionMs > this.now())
+              throw new Error('staged image is still within retention');
+            await this.d.images.remove(ref);
+            this.d.rollback.release(ref);
+            this.d.staged.delete(ref);
+          } else if (kind === 'container') {
+            const cont = containers.find((x) => x.Id === ref);
+            if (!cont) throw new Error('already gone');
+            const name = (cont.Names?.[0] ?? '').replace(/^\//, '');
+            if (!['exited', 'created', 'dead'].includes(cont.State)) throw new Error('not stopped anymore');
+            await this.d.containers.act(ref, 'remove', { confirm: name }, actor);
+          }
+          removed.push({ id: c.id, name: c.name });
+          reclaimed += c.size ?? 0;
+          this.d.audit.record({
+            actor: actor.name,
+            ip: actor.ip,
+            action: kind === 'container' ? 'container.remove' : 'image.remove',
+            target: c.name,
+            params: { via: 'cleanup', previewId, id: c.id, estimatedBytes: c.size ?? 0 },
+            outcome: 'success',
+          });
+        } catch (e) {
+          skipped.push({ id: c.id, name: c.name, reason: (e as Error).message });
+          this.d.audit.record({
+            actor: actor.name,
+            ip: actor.ip,
+            action: kind === 'container' ? 'container.remove' : 'image.remove',
+            target: c.name,
+            params: { via: 'cleanup', previewId, id: c.id, reason: (e as Error).message },
+            outcome: 'denied',
+          });
         }
-        removed.push({ id: c.id, name: c.name });
-        reclaimed += c.size ?? 0;
-      } catch (e) {
-        skipped.push({ id: c.id, name: c.name, reason: (e as Error).message });
       }
-    }
+      // RT3-06: nothing removed => nothing reclaimed, whatever else changed on the host meanwhile
+      return { value: null, estimatedBytes: reclaimed, ...(removed.length === 0 ? { maxBytes: 0 } : {}) };
+    });
     this.d.containers.invalidate();
     this.d.audit.record({
       ...base,
@@ -371,6 +429,179 @@ export class CleanupService {
       outcome: 'success',
       durationMs: this.now() - t0,
     });
-    return { removed, skipped, reclaimedBytes: reclaimed };
+    return { removed, skipped, reclaimedBytes: reclaim.reclaimedBytes, reclaim };
   }
+
+  /**
+   * Removes one image (or one tag of it) from the image list. Server-side rules, whatever the UI sends:
+   * outside QM_MANAGED_SCOPE / read-only => refused; an image any container (running or stopped) uses is
+   * never deleted; a rollback / staged image within retention is kept; a tag a Compose project names is
+   * kept. With `tag` and other tags remaining only that tag is removed (`untagged`); without `tag` every
+   * tag and the image go (`deleted`).
+   */
+  async removeImage(
+    ref: string,
+    opts: { confirm: string; tag?: string },
+    actor: Actor,
+  ): Promise<ResourceRemoveResult> {
+    const base = { actor: actor.name, ip: actor.ip, action: 'image.remove', target: ref };
+    const fail = (e: AppError): never => {
+      this.d.audit.record({
+        ...base,
+        params: { via: 'single', tag: opts.tag ?? null, error: e.message },
+        outcome: 'denied',
+      });
+      throw e;
+    };
+    if (!isSafeRef(ref, 'image')) throw badRequest('Invalid image reference');
+    if (opts.tag !== undefined && !isSafeRef(opts.tag, 'image')) throw badRequest('Invalid tag');
+    const ro = this.d.guard.readOnlyReason;
+    if (ro) return fail(new AppError(409, 'read_only', `Read-only mode: ${ro}`));
+    const info = await this.d.images.inspect(ref);
+    if (!info) throw notFound('Image');
+    const id = info.Id;
+    const short = id.replace('sha256:', '').slice(0, 12);
+    const tags = (info.RepoTags ?? []).filter((t) => t !== '<none>:<none>');
+    if (opts.tag !== undefined && !tags.includes(opts.tag))
+      return fail(new AppError(409, 'conflict', `Image ${short} does not carry the tag ${opts.tag}`));
+    const expected = opts.tag ?? tags[0] ?? short;
+    if (opts.confirm !== expected && opts.confirm !== short)
+      return fail(
+        new AppError(409, 'confirmation_required', `Confirm by sending {"confirm":"${expected}"}`, {
+          expected,
+        }),
+      );
+    const sp = this.scopeProblem(tags, null);
+    if (sp) return fail(new AppError(409, 'out_of_scope', `Refused: ${sp}`));
+
+    const containers = await this.d.docker.listContainers({ all: true });
+    const now = this.now();
+    const referenced = await this.d.projectImageRefs();
+    const rollbackIds = new Set(
+      this.d.rollback
+        .active()
+        .filter((r) => r.expires_at > now)
+        .map((r) => r.image_id),
+    );
+    const protectedTag = (t: string): string | null => {
+      if (!isInternalTag(t)) {
+        const p = parseImageRef(t);
+        if (referenced.has(t) || (p !== null && referenced.has(cacheKey(p))))
+          return `${t} is named by a discovered Compose project`;
+        return null;
+      }
+      const rb = this.d.rollback.get(t);
+      const st = this.d.staged.get(t);
+      if (rb && rb.expires_at > now) return `${t} is a rollback point within retention`;
+      if (st && st.created_at + this.d.retentionMs > now) return `${t} is a staged image within retention`;
+      if (t.startsWith('quaymaster-rollback/') && !rb) return `${t} has no rollback record; kept`;
+      return null;
+    };
+
+    const remaining = opts.tag === undefined ? [] : tags.filter((t) => t !== opts.tag);
+    const wholeImage = opts.tag === undefined || remaining.length === 0;
+    if (!wholeImage) {
+      const tag = opts.tag as string;
+      const why = protectedTag(tag);
+      if (why) return fail(new AppError(409, 'conflict', `Refused: ${why}`));
+      // RT3-05: compare normalised references. A container created as `nginx` stores Image="nginx", while the
+      // tag is "nginx:latest" (and "docker.io/library/nginx:latest" is the same reference too).
+      const want = parseImageRef(tag);
+      const sameRef = (img: string): boolean => {
+        if (img === tag) return true;
+        const p = parseImageRef(img);
+        return want !== null && p !== null && p.digest === null && cacheKey(p) === cacheKey(want);
+      };
+      const byTag = containers.filter((c) => sameRef(c.Image)).map((c) => this.containerLabel(c));
+      if (byTag.length)
+        return fail(
+          new AppError(409, 'conflict', `Refused: container ${byTag.join(', ')} was created from ${tag}`),
+        );
+    } else {
+      const users = containers.filter((c) => c.ImageID === id).map((c) => this.containerLabel(c));
+      if (users.length)
+        return fail(
+          new AppError(
+            409,
+            'conflict',
+            `Refused: image ${short} is used by ${users.length === 1 ? 'container' : 'containers'} ${users.join(', ')} (a stopped container counts)`,
+          ),
+        );
+      if (rollbackIds.has(id))
+        return fail(
+          new AppError(409, 'conflict', `Refused: image ${short} is a rollback point within retention`),
+        );
+      for (const t of tags) {
+        const why = protectedTag(t);
+        if (why) return fail(new AppError(409, 'conflict', `Refused: ${why}`));
+      }
+    }
+
+    const t0 = this.now();
+    try {
+      const { reclaim } = await measureReclaim(
+        this.d.usage,
+        this.d.freeBytes,
+        async (before: DfMeasure | null) => {
+          if (!wholeImage) {
+            await this.d.images.remove(opts.tag as string);
+            // an expired rollback/staged tag that was untagged must not leave a dangling record behind
+            this.d.rollback.release(opts.tag as string);
+            this.d.staged.delete(opts.tag as string);
+            return { value: null, estimatedBytes: 0, maxBytes: 0 }; // untag frees nothing (RT3-06)
+          }
+          for (const t of tags) await this.d.images.remove(t);
+          if ((await this.d.images.inspect(id)) !== null) await this.d.images.remove(id);
+          for (const t of tags) {
+            this.d.rollback.release(t);
+            this.d.staged.delete(t);
+          }
+          return {
+            value: null,
+            estimatedBytes: uniqueSize(id, 0, before),
+            maxBytes: before?.images[id]?.size,
+          };
+        },
+      );
+      this.d.containers.invalidate();
+      this.d.audit.record({
+        ...base,
+        params: {
+          via: 'single',
+          action: wholeImage ? 'deleted' : 'untagged',
+          tags,
+          bytes: reclaim.reclaimedBytes,
+          estimatedBytes: reclaim.estimatedBytes,
+        },
+        outcome: 'success',
+        durationMs: this.now() - t0,
+      });
+      return {
+        kind: 'image',
+        name: expected,
+        action: wholeImage ? 'deleted' : 'untagged',
+        removedTags: wholeImage ? tags : [opts.tag as string],
+        remainingTags: remaining,
+        reclaim,
+      };
+    } catch (e) {
+      this.d.audit.record({
+        ...base,
+        params: { via: 'single', error: (e as Error).message },
+        outcome: 'failure',
+      });
+      throw e;
+    }
+  }
+
+  private containerLabel(c: Dockerode.ContainerInfo): string {
+    return (c.Names?.[0] ?? c.Id.slice(0, 12)).replace(/^\//, '');
+  }
+}
+
+/** Bytes only this image owns: reported size minus layers shared with other images (unknown = full size). */
+function uniqueSize(id: string, fallback: number, df: DfMeasure | null): number {
+  const e = df?.images[id];
+  if (!e) return fallback;
+  return Math.max(e.size - (e.shared ?? 0), 0);
 }

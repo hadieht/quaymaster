@@ -12,6 +12,7 @@ import type {
 } from '@/api/types';
 import { UpdateBadge } from '@/components/domain/badges';
 import { OperationModal } from '@/components/domain/OperationModal';
+import { ReclaimSummary, RemoveImageDialog } from '@/components/domain/StorageRemoval';
 import { ScopeNotice } from '@/components/layout/AppShell';
 import {
   Badge,
@@ -59,6 +60,7 @@ export default function ImagesPage() {
   const [pullRef, setPullRef] = useState('');
   const [op, setOp] = useState<{ id: string; title: string } | null>(null);
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [delImage, setDelImage] = useState<ImageSummary | null>(null);
   const writeBlock = gate();
 
   const statusByRef = useMemo(() => {
@@ -213,6 +215,27 @@ export default function ImagesPage() {
         ) : null;
       },
     },
+    {
+      key: 'remove',
+      header: '',
+      align: 'right',
+      cell: (i) => (
+        <Button
+          size="sm"
+          icon="trash"
+          aria-label={`Remove image ${i.tags[0] ?? i.shortId}`}
+          disabledReason={
+            writeBlock ??
+            (i.inUse
+              ? `In use by ${i.containers.map((c) => c.name).join(', ')} (a stopped container counts).`
+              : null)
+          }
+          onClick={() => setDelImage(i)}
+        >
+          Remove
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -338,6 +361,22 @@ export default function ImagesPage() {
         )}
       </Card>
 
+      {delImage ? (
+        <RemoveImageDialog
+          open
+          image={delImage}
+          onClose={() => setDelImage(null)}
+          onDone={(r) => {
+            invalidate();
+            toast.success(
+              r.action === 'untagged' ? 'Tag removed' : 'Image deleted',
+              r.action === 'untagged'
+                ? `${r.removedTags.join(', ')} (image kept)`
+                : `${bytes(r.reclaim.reclaimedBytes)} reclaimed`,
+            );
+          }}
+        />
+      ) : null}
       {cleanupOpen ? <CleanupDialog onClose={() => setCleanupOpen(false)} onDone={invalidate} /> : null}
       <OperationModal operationId={op?.id ?? null} title={op?.title ?? ''} onClose={() => setOp(null)} />
     </>
@@ -387,7 +426,10 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
     setResult(r);
     setPreview(null);
     onDone();
-    toast.success('Cleanup finished', `${r.removed.length} removed, ${bytes(r.reclaimedBytes)} reclaimed`);
+    toast.success(
+      'Cleanup finished',
+      `${r.removed.length} removed, ${bytes(r.reclaim.reclaimedBytes)} reclaimed`,
+    );
   };
 
   return (
@@ -402,6 +444,20 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
       <div className="space-y-4">
         <fieldset className="space-y-2">
           <legend className="mb-1 text-sm font-medium">What to look for</legend>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              onClick={() => setCats({ ...cats, dangling_images: true, unused_images: false })}
+            >
+              Dangling only
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setCats({ ...cats, dangling_images: true, unused_images: true })}
+            >
+              All unused images
+            </Button>
+          </div>
           {(Object.keys(CATEGORY_LABEL) as CleanupCategory[]).map((c) => (
             <Checkbox
               key={c}
@@ -425,18 +481,19 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
         </Button>
         {error ? <Notice tone="critical">{error}</Notice> : null}
         {result ? (
-          <Notice tone="healthy" title="Done">
-            Removed {result.removed.length}, skipped {result.skipped.length}. Reclaimed{' '}
-            {bytes(result.reclaimedBytes)}.
+          <Notice tone="healthy" title={`Removed ${result.removed.length}, skipped ${result.skipped.length}`}>
+            <ReclaimSummary reclaim={result.reclaim} />
           </Notice>
         ) : null}
         {preview ? (
           <div className="space-y-3">
             <Notice
               tone={preview.candidates.length ? 'warning' : 'info'}
-              title={`${preview.candidates.length} item(s), ${bytes(preview.totalBytes)} would be reclaimed`}
+              title={`${preview.candidates.length} item(s), about ${bytes(preview.totalBytes)} would be reclaimed`}
             >
-              The preview is valid until {dateTime(preview.expiresAt)}. Nothing has been removed yet.
+              The preview is valid until {dateTime(preview.expiresAt)}. Nothing has been removed yet. Sizes
+              count only an image’s own layers: layers shared with other images are freed only when the last
+              image using them is removed.
             </Notice>
             {preview.candidates.length ? (
               <ul
@@ -471,9 +528,10 @@ function CleanupDialog({ onClose, onDone }: { onClose: () => void; onDone: () =>
               </details>
             ) : null}
             {preview.reportOnly.unusedVolumes.length || preview.reportOnly.unusedNetworks.length ? (
-              <Notice tone="info" title="Reported only, never removed here">
+              <Notice tone="info" title="Not part of image cleanup">
                 {preview.reportOnly.unusedVolumes.length} unused volume(s) and{' '}
-                {preview.reportOnly.unusedNetworks.length} unused network(s) are not touched.
+                {preview.reportOnly.unusedNetworks.length} unused network(s) are not touched here. Clean them
+                up from the Volumes &amp; Networks page.
               </Notice>
             ) : null}
             <Button

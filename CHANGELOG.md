@@ -3,6 +3,26 @@
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-11-12
+
+### Added
+
+- Removal of images, networks and volumes from the Images and Volumes & Networks pages, per item and as a bulk
+  "clean up" with the preview, expiring token, typed confirmation and execute-time re-check flow.
+- Volume removal safeguards: only volumes no container (running or stopped) references; Quaymaster's own volume,
+  out-of-scope volumes and volumes of existing Compose projects are kept unless explicitly opted in; anonymous and named
+  volumes are separate opt-in categories (none selected by default); exact name or `delete N volumes` must be typed.
+- Images: untag a single tag of a multi-tag image or delete the whole image; dangling-only and all-unused categories.
+- Estimated and measured reclaimed storage after every removal (`/system/df` before and after, plus free space on the
+  Docker root); image sizes exclude layers shared with other images.
+- Audit records (with bytes) for every removal and refusal.
+
+### Changed
+
+- Volumes and networks are no longer report-only (see `docs/DECISIONS.md`, "Storage cleanup", which amends RT-24).
+- The Engine allow-list gained `DELETE /volumes/<name>` and `DELETE /networks/<id>`, each only with a permit naming
+  exactly that target; prune endpoints stay forbidden.
+
 ## [0.1.0] - 2026-11-12
 
 First release.

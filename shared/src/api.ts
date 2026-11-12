@@ -207,6 +207,8 @@ export interface VolumeSummary {
   labels: Record<string, string>;
   composeProject: string | null;
   usedBy: string[];
+  /** Name is a 64-hex hash: created without a name (`-v /path`). */
+  anonymous: boolean;
   size: number | null;
 }
 

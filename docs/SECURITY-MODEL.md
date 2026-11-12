@@ -68,7 +68,7 @@ All Docker and Compose mutations pass through one service layer, in this order:
 7. **Audit** - append-only `audit_log` (update and delete of young rows blocked by triggers; retention at least 30 days)
    with actor, IP, action, target, redacted parameters, outcome and duration.
 
-Other safety limits: removal never uses force and never removes volumes; Compose `down` never uses `-v`; Compose
+Other safety limits: removal never uses force; containers are never removed together with their volumes (volumes are removed only by the separate, typed-confirmation storage cleanup, and only when no container references them); Compose `down` never uses `-v`; Compose
 is always called with explicit project name, directory and file arguments in a fixed, minimal child environment; every
 child process uses `execFile` with argument arrays (never a shell), identifiers starting with `-` are rejected and `--`
 separates arguments.

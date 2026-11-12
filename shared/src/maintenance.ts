@@ -1,5 +1,7 @@
 /** Updates, maintenance and cleanup contract (spec sections 7.1–7.6, amended by RT-06…RT-29). */
 
+import type { ReclaimReport } from './storage.js';
+
 // ---- update detection ---------------------------------------------------------------------
 
 export type UpdateState =
@@ -314,7 +316,10 @@ export interface CleanupCandidate {
   category: CleanupCategory;
   /** What is removed: image ID/tag, or container ID. */
   name: string;
+  /** Estimated bytes freed: the image's own layers only (size minus layers shared with other images). */
   size: number | null;
+  /** Full size including layers shared with other images (those are freed only with the last user). */
+  virtualSize?: number | null;
   ageHours: number | null;
   note: string;
 }
@@ -332,7 +337,7 @@ export interface CleanupPreview {
   minAgeHours: number;
   candidates: CleanupCandidate[];
   protected: CleanupProtected[];
-  /** Reported only: Quaymaster never deletes volumes or networks in bulk (RT-24). */
+  /** Unused volumes / networks seen; they are cleaned up separately (storage cleanup), never by this preview. */
   reportOnly: { unusedVolumes: string[]; unusedNetworks: string[] };
   totalBytes: number;
 }
@@ -340,7 +345,9 @@ export interface CleanupPreview {
 export interface CleanupResult {
   removed: { id: string; name: string }[];
   skipped: { id: string; name: string; reason: string }[];
+  /** Best measured figure (see `reclaim.basis`); falls back to the estimate. */
   reclaimedBytes: number;
+  reclaim: ReclaimReport;
 }
 
 // ---- monitors -----------------------------------------------------------------------------
