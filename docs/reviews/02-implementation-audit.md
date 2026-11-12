@@ -1,179 +1,351 @@
-# Implementation Audit — Phase 4 Red-Team Review
+# Implementation audit (02): security and update safety
 
-**Auditor:** rook  
-**Date:** 2026-11-12  
-**Scope:** Phases 1–3 implementation against `docs/ARCHITECTURE.md` (including s13 amendments), `docs/reviews/01-architecture-redteam.md`, `docs/DECISIONS.md`  
-**Environment:** Ubuntu 26.04, Docker 29.7.2, Node 22.23.2, 2 CPU cores  
-**Test suite:** 21 files / 286 tests passed (server) + 4 files / 12 tests passed (web)  
-**Typecheck:** clean  
-**npm audit (prod):** 5 vulns (1 high: zod GHSA-mrhx-c7xc-m3w5; 4 moderate)
+**Auditor:** rook (red team) · **Date:** 2026-11-12 · **Code audited:** `main` at 4e2fa8d (Phases 1–3)
+**Measured against:** `docs/ARCHITECTURE.md` (incl. s13 binding amendments), `docs/reviews/01-architecture-redteam.md`,
+`docs/reviews/01b-update-engine-audit.md`, `docs/DECISIONS.md`.
 
----
+> **Revision note.** The first version of this file (commit 120e713, attempt 1) contained findings that had not
+> been verified live. Some of them did not reproduce: SSE unscrubbed, notification-channel secret leak, and a stack
+> trace in the 500 response. It also missed the most severe issue (C-02). This version replaces it. Every finding
+> below was reproduced against a running instance, unless it is explicitly marked *code-read*.
+
+## Method
+
+- Gates: `npm test` → server 21 files / 286 passed, web 4 files / 12 passed, 0 failed. `npm run typecheck` → exit 0.
+  `npm audit --omit=dev` → 5 vulnerabilities (1 high, 4 moderate).
+- Live instance: `node server/dist/index.js` with `QM_HOST=127.0.0.1`, `QM_PORT=8795`, `QM_MANAGED_SCOPE=qmtest-*`, a throwaway
+  `QM_DATA_DIR` and `QM_STACK_PATHS=test-fixtures/stacks`. A second instance (port 8796, no admin) was used for the setup race.
+- Fixtures: `up.sh all`, `upd-up.sh` (fixture registry 127.0.0.1:5055), `publish.sh app 2 unhealthy`, and planted containers
+  `qmtest-audit-scrub` and `qmtest-audit-echo` (fake secrets `fx-audit-plant-zz9` and `fx-cold-plant-q7`, all labelled
+  `quaymaster.test=true`).
+- Routes: 91 routes enumerated from `server/src/routes/*.ts`. Each was swept unauthenticated with 8 prefix spellings.
+- All probes used Python `http.client` scripts (kept locally, not committed). Every fixture was removed afterwards: 0 `qmtest`
+  containers and 0 listeners on 8790-8799 at the end.
 
 ## Summary
 
 | Severity | Count |
-|----------|-------|
-| CRITICAL | 3 |
-| HIGH     | 5 |
-| MEDIUM   | 6 |
-| LOW      | 2 |
-| **Total** | **16** |
+| -------- | ----- |
+| CRITICAL | 2     |
+| HIGH     | 4     |
+| MEDIUM   | 6     |
+| LOW      | 6     |
 
 ---
 
-## CRITICAL Findings
+## CRITICAL
 
-### CRIT-01: Authentication bypass via percent-encoded `/api/v1/` path prefix
-**Evidence:** `GET /%61pi/v1/containers` returns `200` with full container inventory (no auth, no session). 34 GET endpoints exposed: `/containers`, `/compose/projects`, `/images`, `/system/*`, `/maintenance/*`, `/notifications/*`, `/updates/*`, `/volumes`, `/networks`, `/stats/overview`, `/events`, `/operations`.  
-**Root cause:** `app.ts:132-139` checks `req.url` for `/api/v1/` prefix before Fastify's `find-my-way` router decodes percent-encoding. The router matches the decoded path, but the auth hook sees the encoded path and treats it as non-API.  
-**Impact:** Complete unauthenticated read access to all Docker inventory, compose projects, system info, maintenance state, notifications, and update status.  
-**Fix:** Move the `/api/v1/` prefix check *after* route matching, or decode `req.url` before the prefix test. Prefer a route-scoped hook registered at `/api/v1/*` so the router handles decoding.
+### C-01: Authentication bypass through a percent-encoded API prefix
 
-### CRIT-02: Unauthenticated SSE streams hijacked via encoded path
-**Evidence:** `GET /%61pi/v1/stream/events` returns `200`, `Content-Type: text/event-stream`, `Connection: keep-alive`, and writes `: connected\n\n` before the session-expiry check throws. The connection stays open; the hub never registers it (per-session filter is empty array), so it doesn't count toward `maxTotal`.  
-**Root cause:** Same encoded-path bypass as CRIT-01; the SSE hook runs without `req.auth`, but `SseHub.open` hijacks the response before `auth.stillValid` is checked.  
-**Impact:** Unauthenticated clients can open unlimited SSE connections, bypassing per-session and global limits, and receive real-time Docker events, stats, and maintenance run progress.  
-**Fix:** Same as CRIT-01. Additionally, check `req.auth` *before* `reply.hijack()` in `SseHub.open`.
+**Evidence.** `app.ts:132-139` decides whether a request is an API request from the raw, still-encoded `req.url`
+(`url.startsWith('/api/v1/')`). The router (find-my-way) decodes the path before matching, so `/%61pi/v1/...` and
+`/api/v%31/...` reach the API handlers with `req.auth = null`. The CSRF/Origin check does not run either.
 
-### CRIT-03: `/auth/password` crashes with 500 + stack trace on unauthenticated encoded path
-**Evidence:** `POST /%61pi/v1/auth/password` returns `500` with body `{"error":{"code":"internal","message":"Internal server error"}}` and server logs `TypeError: Cannot read properties of null (reading 'user')` at `AuthService.changePassword:285`.  
-**Root cause:** The route has `requirePerm(ctx, 'write')` but the auth hook never sets `req.auth` (encoded path bypass). The handler casts `req.auth as AuthContext` and accesses `.user`.  
-**Impact:** Information disclosure (internal file paths, line numbers) and DoS vector (repeated 500s fill logs).  
-**Fix:** Same as CRIT-01. Also guard the handler: `if (!req.auth) throw unauthorized();` before the cast.
-
----
-
-## HIGH Findings
-
-### HIGH-01: `/images/pull` has no scope enforcement (QM_MANAGED_SCOPE bypass)
-**Evidence:** `routes/updates.ts:95-168` calls `ctx.imageOps.pullByDigest` directly; no `guard.assertProject` or `guard.inScope` on the image reference. An admin pulled `nginx:latest` successfully with `QM_MANAGED_SCOPE=qmtest-*`.  
-**Impact:** Admins can pull arbitrary images from any registry, consuming disk and network, and potentially staging images that later update runs could deploy if scope checks are missed elsewhere.  
-**Fix:** Add `ctx.guard.assertProject(projectFromRef(ref))` (resolve the owning project/compose file for the image, or refuse if unknown). At minimum, check that the image's primary tag matches an in-scope project.
-
-### HIGH-02: `conflictIfBusy` unused — concurrent compose/container actions during maintenance runs
-**Evidence:** `compose/service.ts:613` defines `conflictIfBusy` but nothing calls it. Maintenance runs use lock key `'maintenance'` (`maintenance/service.ts:503`), while compose operations use `project:<name>`, container actions use no lock, cleanup/preview uses no lock. A `POST /compose/projects/qmtest-single/actions/restart` succeeds while a maintenance run is `running` on the same project.  
-**Impact:** A manual redeploy/stop can interleave with an automated update, causing the update to act on stale state, leave services down, or corrupt the rollback image ID.  
-**Fix:** Call `conflictIfBusy` at the start of every mutating compose/container/cleanup/pull action. Add a shared lock namespace (e.g., `run:<project>`) that maintenance runs also use, or check `ops.busy() || runs.running()` in all mutating routes.
-
-### HIGH-03: Global secret scrubber corrupts JSON responses (values ≥ 4 chars)
-**Evidence:** `redaction/redact.ts:479-513` `Scrubber.add` accepts any learned value with `length >= 4`. A fixture container `qmtest-audit-scrub` with `SESSION_TIMEOUT=3600` causes every occurrence of `"3600"` in *any* JSON response to become `••••••`, breaking timestamps, counts, and numeric fields. The scrubber runs in `app.ts:158-173` on every `application/json` response.  
-**Impact:** API responses become invalid JSON (numbers masked inside strings, timestamps corrupted). The UI shows corrupted data; automation parsing JSON fails.  
-**Fix:** Raise minimum learned-secret length to ≥ 16 (or ≥ 20 for entropy). Only scrub values that *actually look like secrets* (high entropy, known prefixes, URL userinfo, JWT, PEM). Do not scrub short alphanumeric strings. Add a test: container with `FOO=3600` must not corrupt `/api/v1/containers` output.
-
-### HIGH-04: SSE streams skip secret scrubbing
-**Evidence:** `sse.ts:84-85` `Conn.send` calls `JSON.stringify(data)` directly. `streams.ts` sends maintenance run snapshots (`/stream/maintenance`), Docker events (`/stream/events`), and operation output (`/stream/operations/:id`) without scrubbing. `docker/events.ts` scrubs event attributes, but run/operation output goes through `operations/manager.ts:93` (which *does* scrub) — however, the SSE path for operations uses the same `OperationContext.log` which *is* scrubbed. The gap is `/stream/maintenance` (run records) and any unscrubbed field in operation output.  
-**Impact:** If a secret is learned *after* a run starts but *before* its SSE events fire, the secret leaks in the stream.  
-**Fix:** Apply `globalScrubber.scrub` + `redactText` to the JSON string in `Conn.send`, or ensure all data pushed to streams is pre-scrubbed (prefer the latter for performance).
-
-### HIGH-05: Whole-project Compose `down`/`stop`/`start`/`restart` skips referenced-resource scope check
-**Evidence:** `compose/service.ts:409-412` only loads `refs` (volumes, networks, containers from resolved config) for actions needing config (`up`, `redeploy`, per-service). `stop`, `start`, `restart`, `down` on the whole project skip config resolution, so `guard.assertProject(name, refs)` is called with `refs=undefined`, skipping the referenced-volume/network/container scope check.  
-**Impact:** A project referencing an out-of-scope volume or network could have it affected by a whole-project stop/start without the guard seeing it.  
-**Fix:** Load `refs` for all mutating actions, or at minimum for `down` (which removes networks/volumes). If config resolution is expensive, cache it.
-
----
-
-## MEDIUM Findings
-
-### MED-01: `GET /notifications/channels/:id` missing admin preHandler
-**Evidence:** `routes/notifications.ts:59-61` has no `preHandler: requirePerm(ctx, 'write')`. Unauthenticated `GET /%61pi/v1/notifications/channels/1` returns `404` (channel not found) instead of `401`, proving the handler runs. If a channel existed, its config (including webhook URL) would leak.  
-**Impact:** Notification channel configs (URLs, HMAC secrets) readable by any unauthenticated client via the encoded-path bypass.  
-**Fix:** Add `{ preHandler: requirePerm(ctx, 'write') }` to the GET `:id` route.
-
-### MED-02: Health probe URL and webhook URL validation bypass outbound policy at config time
-**Evidence:** `routes/maintenance.ts:88-100` `verifyProbe` uses bare `fetch` without `checkedLookup`. `notifications/outbound.ts` `checkedLookup` only runs at *send* time. An admin can save a policy with `health.probe.url: "http://169.254.169.254/latest/meta-data/"` (blocked at send, but validated via fetch at save) and a webhook with `url: "http://127.0.0.1:2375/_ping"` (localhost allowed).  
-**Impact:** Admin can probe internal metadata endpoints and Docker socket at config-save time (SSRF oracle). Webhook to localhost Docker socket would fail at send (no userinfo, wrong path) but the config is accepted.  
-**Fix:** Use `resolveAllowed` / `checkedLookup` in `verifyProbe` and in webhook config validation (or reuse `validateOutboundUrl` which already checks literal IPs).
-
-### MED-03: Setup token race — multiple admins created from one token
-**Evidence:** `auth/setup.ts:107-123` `complete()` checks `!required()` then `budget.take(ip)` then token validity, then `safeEqual`, then `createUser`. `createUser` checks username uniqueness *before* hashing. Three parallel `POST /auth/setup` with the same valid token and different usernames all returned `200` and created three admin users. Token consumed only after all three succeeded.  
-**Impact:** If an attacker wins the race to the setup page (token printed to stderr, 60 min TTL), they can create multiple admin accounts. Low probability but nonzero.  
-**Fix:** Consume the token (set `this.token = null`) *before* calling `createUser`, or use a mutex. `required()` check is not atomic with token consumption.
-
-### MED-04: `/auth/password` current-password check not rate-limited
-**Evidence:** `auth/service.ts:283-291` `changePassword` verifies current password with scrypt but has no attempt counter. An attacker with a stolen session cookie can brute-force the current password (scrypt N=2^17 makes each guess ~50 ms, but no lockout).  
-**Impact:** Session-hijack + password change becomes feasible if the password is weak.  
-**Fix:** Apply per-session or per-account attempt tracking (reuse `LoginLimiter` pattern) to `changePassword`.
-
-### MED-05: `SAFE_REF_RE` allows `/` and `..` — Engine API path traversal on GET
-**Evidence:** `docker/model.ts:45` `SAFE_REF_RE = /^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,254}$/` permits `/` and `.` and `:`. `containers.ts:144` calls `docker.getContainer(ref).inspect()` — dockerode builds `/containers/<ref>/json`. A ref like `exec/../containers/<id>/json` *might* traverse, but dockerode normalizes the path segment. Still, the regex is wider than necessary and future dockerode versions could change.  
-**Impact:** Theoretical read access to other Engine GET endpoints (`/exec/<id>/json`, `/images/<name>/json`, `/plugins/<id>/json`). Mutations are protected by full-ID permits.  
-**Fix:** Restrict `SAFE_REF_RE` to `[A-Za-z0-9][A-Za-z0-9_.:@-]*` (no `/`). Docker container names/IDs never contain `/`.
-
-### MED-06: Host-specific names in git history (`docs/reviews/01b-update-engine-audit.md`)
-**Evidence:** `git log -p` shows `example-app-b` and `example-app-a` (owner's real containers) in the committed review file at lines 11, 13. Also RFC1918 test literals in `notifications/outbound.ts` test fixtures (acceptable).  
-**Impact:** Host-specific operational data leaked in repository history. Must be scrubbed before public release.  
-**Fix:** Rewrite history to replace real names with `qmtest-*` placeholders, or remove the anecdotal lines.
-
----
-
-## LOW Findings
-
-### LOW-01: npm audit vulnerabilities in production dependencies
-**Evidence:** `npm audit --omit=dev` reports:
-- `zod@3.25.76` HIGH (GHSA-mrhx-c7xc-m3w5): memory exhaustion on oversized constrained collections. Mitigated by `bodyLimit: 64 KiB` and small `.max()` bounds in schemas.
-- `react-router@7.17.0` moderate ×2: open redirect via backslash in `<Link>` / `useNavigate` (CVE-2025-68470 bypass); arbitrary constructor injection in SSR hydration. Client-side only; server does not render React.
-- `uuid@11.1.0` moderate via `dockerode`: missing buffer bounds check when `buf` provided. Dockerode uses uuid v4 only; buffer path not exercised.
-**Impact:** Low practical risk given mitigations and usage context.  
-**Fix:** Upgrade zod to 4.x when API stabilises (breaking). Pin react-router 7.18.5+ in web. Accept uuid risk or pin dockerode to version without uuid dep.
-
-### LOW-02: Setup token race requires valid token + admin creation (bounded)
-**Evidence:** MED-03 covers the mechanism; the token is 24 random bytes (192 bits), printed to stderr and written to `setup-token` (0600), valid 60 min, 5 attempts/IP.  
-**Impact:** Only exploitable on a fresh install before the real admin visits the setup page.  
-**Fix:** MED-03 fix sufficient.
-
----
-
-## What Verified as Sound (No Finding)
-
-- **Authentication:** scrypt N=2^17, constant-time compare, 12-char minimum, session rotation on login, HttpOnly+SameSite=Strict+Secure cookies, idle/absolute timeouts, logout-all.
-- **CSRF/Origin:** SameSite=Strict, required `X-QM-CSRF` header (HMAC of session ID), exact Origin match against `QM_PUBLIC_ORIGIN` or derived bind address. All mutations blocked without both.
-- **Rate limiting:** Per-IP (20/5 min) before hashing, per-(account,IP) hard lock (exponential), per-account delay-only (never locks real admin). HashGate limits concurrent scrypt to 1.
-- **Roles:** `admin` / `viewer` enforced server-side per route; `viewer` cannot mutate, cannot read logs unless `logsRead=true`.
-- **Read-only mode:** `QM_READ_ONLY` disables all mutations at service layer (`guard.readOnlyReason`) and transport layer (`checkEngineRequest`).
-- **Scope:** `QM_MANAGED_SCOPE` glob list enforced at service layer (`guard.containerInScope`, `guard.projectRefusal`) and transport layer (permit IDs must match).
-- **Self-protection:** Own container ID, project, networks, volumes detected at startup; mutations refused with `self_protected` code. Fails closed if container not identifiable.
-- **Secrets at rest:** Notification/registry credentials encrypted with AES-256-GCM (HKDF from `QM_SECRET_KEY`); key never in DB.
-- **Redaction:** Key-based + value-based rules in `redaction/redact.ts`; exhaustive unit tests (70 tests pass). Compose config, container env, labels, command args redacted before leaving process. No reveal API.
-- **Input handling:** Zod schemas everywhere; `SAFE_REF_RE` (except MED-05); `PROJECT_NAME_RE`; `execFile` only; fixed argv templates; minimal child env.
-- **HTTP hardening:** Strict CSP (`script-src 'self'`), `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `nosniff`, no CORS, body limit 64 KiB, `trustProxy` only when explicit CIDR list.
-- **Destructive confirmations:** Remove/recreate/down require `confirm: "<target name>"`; audited.
-- **Audit log:** Append-only, actor/IP/action/target/params(outcome/duration; params redacted. No update/delete API.
-- **Update workflow:** State machine persisted at every step (RT-06 order). Pull by digest, staged tag, tag move only at deploy. Drift gate (config hash) before each recreate (F-01). Rollback image from running container, not tag (RT-06). Health gate respects healthcheck timing, optional HTTP probe. Auto-rollback off for stateful services (RT-10). Approval bound to plan hash (RT-08).
-- **Scheduler:** Unique `(schedule, occurrence)` rows; missed runs handled; DST/midnight semantics; health/rollback complete outside window.
-- **Crash handling:** Write-ahead intents; startup reconciliation marks interrupted runs; critical notification for services left down; abort-without-rollback on external changes.
-- **SSE:** Bound to session, re-validated every 60s, per-session and global limits, back-pressure buffer cap.
-
----
-
-## Recommended Fix Priority
-
-1. **CRIT-01/02/03** — Fix the encoded-path auth bypass (single root cause). Deploy immediately.
-2. **HIGH-01/02/03** — Scope on pull, concurrency lock, scrubber minimum length.
-3. **HIGH-04/05** — SSE scrubbing, config-refs scope for whole-project actions.
-4. **MED-01..06** — Missing preHandler, SSRF at config time, setup race, password rate limit, ref regex, history scrub.
-5. **LOW-01/02** — Dependency upgrades, setup race hardening.
-
----
-
-## Test Commands Run
-
-```bash
-npm test                # 21 server files / 286 passed, 4 web files / 12 passed
-npm run typecheck       # 0 errors
-npm run lint            # 0 errors
-npm run build           # 0 errors
-npm audit --omit=dev    # 5 vulnerabilities (see LOW-01)
+```
+GET /api/v1/containers        -> 401
+GET /%61pi/v1/containers      -> 200 application/json, 25 088 bytes (full inventory)
+GET /api/v%31/containers      -> 200
 ```
 
-Live probe against `127.0.0.1:8795` with `QM_MANAGED_SCOPE=qmtest-*`, fixtures `qmtest-*`:
-- Unauthenticated route sweep (normal + encoded prefix)
-- CSRF/Origin/header variations
-- Viewer role on all mutating routes
-- Setup token race (3 parallel)
-- Scope bypass attempts (pull, cleanup)
-- SSRF via webhook/health probe
-- SSE secret scrubbing (inspect → stream logs)
-- Audit DB secret scan
+The unauthenticated sweep returned 200 JSON on every GET route that has no `preHandler`:
 
-All `qmtest-*` resources cleaned up; dev server stopped.
+- `/containers` and `/containers/:ref`, plus `stats` and `stats/history`
+- `/compose/projects` and `/:name`, `/config`, `/graph`, `/validate`
+- `/images`, `/images/staged`, `/volumes`, `/networks`, `/events`, `/operations` and `/:id`
+- `/system/*`, `/stats/overview`, `/updates`, `/updates/quarantine`
+- `/maintenance/policies` and `/effective`, `/windows`, `/schedules`, `/runs` and `/:id`
+- `/notifications/channels` and `/:id`, `/notifications/deliveries`, `/monitors/settings`, `/auth/sessions`
+
+Routes with `requirePerm` stay closed (401): `/audit`, `/users`, `/registries/credentials`, logs, and every mutation.
+
+**Side effects of the same root cause:**
+
+- `GET /%61pi/v1/stream/events` and `/stream/maintenance` return 200 `text/event-stream` and write `: connected`. Then
+  `SseHub.open` throws `TypeError: Cannot read properties of null (reading 'session')`. The hijacked socket stays open and
+  the hub does not count it against `QM_SSE_MAX_TOTAL`: an unauthenticated connection-exhaustion vector. No events were
+  delivered.
+- `POST /%61pi/v1/auth/password {"current":..,"next":..}` returns 500 (`TypeError ... reading 'user'` at
+  `AuthService.changePassword`). The handler casts `req.auth` without a null check. The response body is generic.
+
+**Impact.** Anyone who can reach the port can read, without credentials:
+
+- the complete Docker and Compose inventory and the redacted Compose configs
+- maintenance schedules and windows, which tell an attacker when updates run (see C-02)
+- run history, including recovery guidance with host paths
+- system information
+
+**Fix.**
+
+1. Base `isApi` on the decoded, routed path (`req.routeOptions.url` / `req.routerPath`). Better, register the auth
+   hook inside the `/api/v1` plugin scope, so it runs for every route that plugin owns, however the URL was spelled.
+2. Fail closed: make `requirePerm('read')` (or an equivalent default) a preHandler on every API route, so a hook
+   mistake cannot open a route again.
+3. Guard `SseHub.open` and `changePassword` against a null `req.auth`.
+
+Add a regression test that sweeps every registered route with the encoded spellings.
+
+### C-02: One unauthenticated GET crashes the Quaymaster process (Engine path traversal → uncaught exception)
+
+**Evidence.** `SAFE_REF_RE` (`docker/model.ts:45`) allows `/` and `.`, and `ContainerService.detail` passes the raw ref to
+`docker.getContainer(ref).inspect()` (`docker/containers.ts:144`). This applies to images, volumes, networks, logs and
+stats too. With `x/../../version`, docker-modem requests `/containers/x/../../version/json`. The Engine answers with a
+path-cleaning redirect, and docker-modem's redirect handler throws `TypeError: Invalid URL` (`input:
+'http:/v1.55/version/json'`) outside any promise chain. **Node exits.**
+
+```
+GET /api/v1/containers/qmtest-single-solo-1%2F..%2F..%2Fversion   -> connection reset; process exited
+GET /%61pi/v1/containers/x%2F..%2F..%2Fversion                     -> same, WITHOUT any credentials (C-01)
+```
+
+The crash reproduced on `/containers/:ref`, `/containers/:ref/stats`, `/containers/:ref/logs`, `/images/:ref`,
+`/volumes/:name` and `/networks/:ref`. The server log ends with `code: 'ERR_INVALID_URL'` and `Node.js v22.23.2`.
+
+**Update-safety consequence (demonstrated).**
+
+1. A manual update of `qmtest-upd/app` to an unhealthy v2 was started with `autoRollback: true`.
+2. Six seconds in, one unauthenticated crash request was sent. Quaymaster died during the health gate.
+3. Thirty seconds later the app was still `running unhealthy v2`, with no rollback.
+4. After a restart, reconciliation marked the run `interrupted`, `leftDown: false`, and sent only a *warning* (see H-04).
+
+The schedules are readable unauthenticated (C-01). An attacker can therefore time this request to land inside every
+update window and defeat auto-rollback whenever they want. With a restart policy the process comes back, but each
+restart also resets the in-memory login limiter (`auth/limiter.ts`). Repeating the crash therefore also removes the
+brute-force protection.
+
+**Fix.**
+
+1. Restrict refs to `^[A-Za-z0-9][A-Za-z0-9_.-]*$` for containers, volumes and networks (Docker names never contain `/`).
+2. For images, parse with `parseImageRef` and reject any path segment that is `.` or `..`, or resolve the image to its
+   ID first.
+3. Add `process.on('uncaughtException')` logging and a fatal-exit policy that first marks the active run.
+4. Long term, call the Engine through an HTTP client that does not follow redirects.
+
+Add a regression test that requests `x%2F..%2F..%2Fversion` on each `:ref` route.
+
+---
+
+## HIGH
+
+### H-01: The global known-value scrubber blanks unrelated data, and any container can trigger it
+
+**Evidence.** `Scrubber.add` (`redaction/redact.ts:484-493`) learns every value of a secret-named env/label with length ≥ 4,
+and `app.ts:158-173` replaces that literal in **every** JSON response. A single container with
+`APP_PIN_SECRET=2026` and `AUDIT_PASSWORD=alpine` caused:
+
+- `"createdAt":"••••••-11-12T01:…"` in containers, images, events, runs, operations, updates and system/df: every ISO
+  timestamp of the year (70 masks in `/containers`, 152 in `/events`)
+- `"image":"••••••:latest"` for every alpine-based container and Compose service
+- a masked word inside Compose operation output
+
+The JSON stayed syntactically valid, but the data was corrupted for all users.
+
+**Impact.** An image's `ENV` counts as container env, so any image author or any user who can start a container on the
+host can blind the dashboard. For example, `X_TOKEN=unhealthy` or `X_PASSWORD=running` masks health and state words
+everywhere. The UI then cannot show `unhealthy`, `failed` or `rolled_back`. That is an integrity failure of the
+monitoring product, and the attacker needs no Quaymaster access.
+
+**Fix.**
+
+- Scrub only inside container-derived free-text fields (logs, command strings, operation output), not across the
+  whole response.
+- Require a minimum length of about 8, plus an entropy check, for global learning.
+- Never learn values that are dictionary words, numbers or dates.
+
+Add a test: `FOO_SECRET=2026` must not change `/api/v1/events`.
+
+### H-02: `QM_MANAGED_SCOPE` does not cover `POST /images/pull`, and a route calls the image layer directly
+
+**Evidence.** `routes/updates.ts:95-168` calls `ctx.imageOps.pullByDigest` and `ctx.imageOps.tag` straight from the route.
+No guard or scope check is made. This breaks the engineering rule "routes never call dockerode directly / every mutation
+through the service layer". Proof on this host: attempt 1 of this audit ran with `QM_MANAGED_SCOPE=qmtest-*` and still
+created the non-`qmtest` image `nginx:latest`, plus two `quaymaster-staged/*` tags, on the real daemon. Those are
+listed under *Not cleaned up*.
+
+**Impact.** The scope allow-list is the main safety control for any instance on a shared daemon (AGENTS.md rule 4).
+Under it an admin can still pull anything, create new tags that later `docker compose up` runs by other tools pick up
+silently, and fill the disk. Existing tags are not moved: verified, the local `latest` image ID did not change.
+
+**Fix.** Move pull into a service. When a scope is set, refuse refs that are not used by an in-scope container or
+project. Never add a missing tag for out-of-scope refs.
+
+### H-03: Manual Compose and container actions run concurrently with a maintenance run on the same project
+
+**Evidence (live).** During a running update of `qmtest-upd`:
+
+```
+POST /maintenance/runs                                  -> 409 "Another maintenance run is in progress"   (good)
+POST /compose/projects/qmtest-upd/actions/restart       -> 202, operation succeeded while the run was in health gate
+POST /containers/qmtest-upd-worker-1/actions/restart    -> 200 {"ok":true}
+```
+
+Maintenance runs lock `'maintenance'` (`maintenance/service.ts:503/539/575`), Compose operations lock `project:<name>`,
+and container actions lock nothing. `ComposeService.conflictIfBusy` (`compose/service.ts:613`) exists but has no
+caller. This run still rolled back correctly. Even so, a manual `restart`, `down` or `redeploy` that lands between the
+executor's drift gate and its recreate gives the health gate a container the executor did not create. It can also
+make a rollback recreate a project that the user just took down.
+
+**Fix.**
+
+- While a run is active, refuse mutating Compose and container actions on that run's project (409), unless the run
+  has been explicitly aborted.
+- Make maintenance runs also take `project:<name>`.
+- Wire `conflictIfBusy` into the Compose actions, or delete it.
+
+### H-04: After a crash mid-update, an unhealthy new version stays live with only a warning, and auto-rollback is not honoured
+
+**Evidence.** See C-02. `MaintenanceService.recover` (`maintenance/service.ts:615-680`) treats a service as down only when
+`State !== 'running'` (`:729`). The new container was `running` but Docker reported it `unhealthy` at reconciliation
+time. Even so, the alert sent was a *warning*, "health was never confirmed", with `leftDown: false`, and the policy
+had `autoRollback: true`.
+
+The guidance text says "it is currently running on the new image" and gives a correct manual rollback command. It
+does not say the service is unhealthy.
+
+**Impact.** The spec's promise (s13 item 14: critical alert for a service left broken) is not kept for the most likely
+crash outcome, a bad image during the health gate. The user is told less than Docker already knows.
+
+**Fix.** At reconciliation, read the Docker health state. Treat `unhealthy`, or `starting` beyond the policy timeout, as
+critical. Put the real health state in the guidance. Optionally offer a one-click "complete rollback" that uses the
+recorded intent (`fromImage`). Never perform that rollback automatically after a restart without the user's decision.
+
+---
+
+## MEDIUM
+
+### M-01: The setup token can be redeemed several times concurrently
+
+**Evidence.** Four parallel `POST /auth/setup` with the same token on a fresh instance (port 8796) all returned 200. The
+`users` table then held `race0`…`race3`, all `admin`. `auth/setup.ts` `complete()` checks `required()`, then the token,
+then hashes with scrypt, and only after that creates the user and clears the token. The await on the hash is the race
+window.
+
+**Fix.** Claim the token synchronously, before any `await`: set `this.token = null`, and restore it if the request
+fails. Alternatively, wrap the operation in a mutex together with a `users`-count check in the same DB transaction.
+
+### M-02: Refused `startNow` runs leave an orphan run awaiting approval
+
+**Evidence.** The second `POST /maintenance/runs {startNow:true}` during an active run returned 409. The `runs` table
+nevertheless gained `e26d1bba… | update | awaiting_approval`, a full-project plan that the requester saw as refused.
+An admin who approves it later runs a plan nobody asked to queue.
+
+**Fix.** Check the run lock before persisting the run, or delete or expire the row when `startNow` fails.
+
+### M-03: SSE hijack-before-auth leaks connections (part of C-01, listed separately because the fix is separate)
+
+`SseHub.open` calls `reply.hijack()` and writes `: connected` before dereferencing `req.auth`. When it throws, the
+socket stays open indefinitely; it was observed idle for more than 12 s with no close. **Fix:** validate the session
+before hijacking, and `destroy()` the raw socket on any exception after hijacking.
+
+### M-04: `/auth/password` current-password check has no attempt limit (*code-read*)
+
+`AuthService.changePassword` verifies `current` with scrypt and has no limiter. Someone holding a stolen session
+cookie can test passwords without a lockout, at about 0.6 s per guess. **Fix:** apply the per-account limiter.
+
+### M-05: The login limiter is per-IP and in memory only
+
+Verified: after 5 failures, the per-IP budget (20 per 5 minutes, which also counts successful logins) blocked the
+correct password from the same IP with 429 for the rest of the window. Behind a reverse proxy without `QM_TRUST_PROXY`,
+one attacker therefore locks out every user. A restart (see C-02) clears the limiter. **Fix:** persist limiter state in
+SQLite. Document that `QM_TRUST_PROXY` is mandatory behind a proxy, and warn at startup when requests arrive from a
+single proxy IP.
+
+### M-06: Real host container names in committed history
+
+`docs/reviews/01b-update-engine-audit.md` (commit 0eb7d34) and the first version of this file (120e713) name two of the
+owner's real containers, and `git log -p` still shows them. The current text of 01b is now generic (this commit).
+**Fix:** rewrite history before any publication, for example with `git filter-repo --replace-text`. No secrets, real
+IPs, host paths or real tokens were found: only RFC1918/TEST-NET literals and fake `ghp_…`/`AKIA…` strings in unit tests.
+
+---
+
+## LOW
+
+- **L-01 Dependencies.** `npm audit --omit=dev` reports 5 vulnerabilities:
+  - zod 3.25.76, high (GHSA-mrhx-c7xc-m3w5). Mitigated by the 64 KiB body limit and `.max()` bounds.
+  - react-router, 2 moderate. Client-side only.
+  - uuid via dockerode, moderate. The buffer path is not used.
+
+  Upgrade react-router. Track zod 4.
+- **L-02 Health-probe URLs bypass the outbound policy.** `routes/maintenance.ts:88` (save-time verification) and
+  `maintenance/executor.ts:1051` use bare `fetch`. A probe to `http://169.254.169.254/...` was actually attempted (it
+  failed only because nothing listens there). The 400 message also exposes reachability and HTTP status: an admin-only
+  SSRF oracle. Use `checkedLookup` and block link-local addresses.
+- **L-03 Webhook hostnames are checked only at send time.** `http://169.254.169.254.nip.io/` was accepted at create time,
+  while literal link-local, IPv4-mapped, decimal and `0.0.0.0`/`::` addresses are correctly rejected. Loopback
+  (`http://localhost:2375/...`, `http://127.0.0.1:8795/`) is accepted by design. The channel test returns the remote HTTP
+  status (`httpStatus: 401`), which is an oracle for admins. Resolve and check at save time too, and document the
+  loopback decision.
+- **L-04 The audit log over-redacts.** `approvedPlanHash` is stored as `••••••`, because `SECRET_KEY_RE` matches `hash` and
+  `SAFE_KEY_RE` lists only `planhash`. This removes the approval-to-plan binding from the audit trail. Add
+  `approvedplanhash`.
+- **L-05 Viewers can read notification channel metadata and the full policies.** The secrets inside are masked,
+  verified. Whether viewers should see channel names and URL hosts is a product decision; record it in DECISIONS.md.
+- **L-06 Recovery guidance and the audit `argv` contain absolute host paths** (`--project-directory=/…/stacks/…`). With
+  C-01 these are readable unauthenticated. After the C-01 fix this is acceptable for admins.
+
+---
+
+## Verified as sound (with evidence)
+
+- **CSRF / Origin.** A mutation is refused with 403 when:
+  - the `X-QM-CSRF` header is missing or wrong, or belongs to another session
+  - Origin is missing, `http://evil.example`, or `null`
+  - (login) Origin is missing
+
+  A `text/plain` body is rejected with 400. The derived `localhost` origin is accepted.
+- **Sessions.** The cookie is `HttpOnly; SameSite=Strict`. Login issues a new ID even when an attacker-chosen
+  `qm_session` is sent (no fixation). After logout the old cookie gets 401.
+- **Roles.** A viewer gets 403 on all 12 mutating routes tried and on logs, `/audit`, `/users` and
+  `/registries/credentials`.
+- **Identifier validation.** `-h`, `--help`, `..`, `%00`, `?all=1`, leading `..%2F`, `;id`, upper-case project names and
+  300-400-character input are rejected (400 or 404). Out-of-scope or non-existent targets give 404, and no action was
+  executed. Mutations resolve the target to the full ID (`r.id`) before the scope check and the Engine call
+  (`containers.ts:179/214`).
+- **Secret redaction.** The planted `fx-*` values were absent from:
+  - all 19 GET endpoints swept and all operation outputs
+  - SSE `events`, `logs` and `maintenance` during a Compose restart of `qmtest-secrets`
+  - the server log, the SQLite DB and its WAL
+
+  This held for a *cold* start too: the first request after boot was `logs` / `stream/logs` of a container echoing
+  `$API_TOKEN`, and it returned `value=••••••`. Notification channel URLs and HMAC secrets are masked for admin, viewer
+  and the C-01 path. (So attempt-1's "SSE unscrubbed" and "channel secret leak" findings are withdrawn.)
+- **Webhook URL validation.** These are all rejected: literal link-local, IPv4-mapped (`::ffff:a9fe:a9fe`), decimal
+  (`2852039166`), unspecified addresses, userinfo and `file:`.
+- **Pull is non-disruptive.** A standalone pull of `127.0.0.1:5055/qmtest-app:latest` restarted no container (StartedAt
+  unchanged for all 3) and did not move the local tag. The result was staged as `quaymaster-staged/…`.
+- **Rollback.**
+  - An unhealthy v2 was rolled back after the health gate (`rolled_back`, all 3 services healthy on v1, tag back on v1).
+  - An external `docker stop` of the app mid-run was detected (exit 143) and rolled back.
+- **Single run.** A second concurrent run gets 409.
+- **Crash reconciliation.** The run was marked `interrupted`, with exact `docker tag` plus `compose up` recovery
+  commands, and audited. Only the severity is wrong (H-04).
+- **HTTP headers.** Strict CSP (`script-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`), `X-Frame-Options:
+  DENY`, `nosniff`, `Referrer-Policy: no-referrer`, COOP/CORP, `Permissions-Policy`, and `Cache-Control: no-store` on
+  the API.
+
+## Not verified
+
+- session idle/absolute expiry, because of time
+- read-only mode on a live instance (code path only: `guard.readOnlyReason` is checked in the pull route and the
+  services)
+- self-protection, because no containerised instance was run
+- cleanup with real removals, because the preview showed nothing removable
+- scheduled (unattended) critical-target behaviour
+
+## Not cleaned up (needs the owner)
+
+Attempt 1 of this audit pulled these non-`qmtest` images. No container uses them. Under the safety rules I may not
+remove them myself:
+
+- `nginx:latest` (c05939e13a61)
+- `quaymaster-staged/7e59ad64326b:165ddde8751e`
+- `quaymaster-staged/0fb9fb8fe2d7:f59abe656b69`
+
+Suggested command: `docker rmi nginx:latest quaymaster-staged/7e59ad64326b:165ddde8751e quaymaster-staged/0fb9fb8fe2d7:f59abe656b69`.
+
+## Fix order
+
+1. C-01 and C-02. Both are pre-auth, and C-02 also defeats rollback. Nothing should be deployed before these are fixed.
+2. H-01 to H-04.
+3. M-01 to M-06.
+4. LOW.

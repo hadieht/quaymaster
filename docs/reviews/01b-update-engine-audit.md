@@ -8,9 +8,9 @@ All runs used only the `qmtest-*` fixtures (label `quaymaster.test=true`), the f
 bound to `127.0.0.1` with `QM_MANAGED_SCOPE=qmtest-*`.
 
 > **Status note.** At about 11:47 UTC the operator (atlas) paused all Docker testing on this host, because two real standalone
-> containers (example-app-b, example-app-a) had disappeared. I stopped my in-flight full-suite rerun at once and ran no further Docker
+> containers owned by the host operator had disappeared. I stopped my in-flight full-suite rerun at once and ran no further Docker
 > mutations. Cleanup is therefore **pending** (see "Not done"). I checked my own traces for that investigation
-> (read-only): no `audit_log` or `events` row in any `.local/*/quaymaster.db` names example-app-b or example-app-a. Every recorded
+> (read-only): no `audit_log` or `events` row in any `.local/*/quaymaster.db` names either of those containers. Every recorded
 > `destroy`/`rename`/`stop`/`kill` event concerns `qmtest-*` resources. My scripts and demos address only `qmtest-*` names.
 
 ## Claims under test
