@@ -23,6 +23,25 @@ const list = z.string().transform((v) =>
     .filter(Boolean),
 );
 
+const HOST_RE =
+  /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+(:\d{1,5})?$/i;
+/** `registry.example.com=auth.example.com,other.io=sso.other.io` -> allow-list; anything malformed is a startup error. */
+const validHost = (h: string): boolean =>
+  HOST_RE.test(h) && /[a-z]/i.test(h.split(':')[0]!.split('.').pop()!);
+export function parseTokenRealms(items: string[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const item of items) {
+    const [reg, tok, ...rest] = item.split('=').map((s) => s.trim().toLowerCase());
+    if (!reg || !tok || rest.length || !validHost(reg) || !validHost(tok) || tok.includes(':')) {
+      throw new Error(
+        `QM_REGISTRY_TOKEN_REALMS: invalid entry "${item}" (expected registry.host=token.host)`,
+      );
+    }
+    (out[reg] ??= []).push(tok);
+  }
+  return out;
+}
+
 const int = (min: number, max: number) => z.coerce.number().int().min(min).max(max);
 
 const schema = z.object({
@@ -63,6 +82,7 @@ const schema = z.object({
   QM_WEB_DIR: z.string().optional(),
   QM_DISABLE_BACKGROUND: bool.default('false'),
   QM_REGISTRY_INSECURE: list.default(''),
+  QM_REGISTRY_TOKEN_REALMS: list.default(''),
   QM_CHECK_TTL_MINUTES: int(1, 7 * 24 * 60).default(360),
   QM_ROLLBACK_RETENTION_DAYS: int(0, 365).default(7),
   QM_CLEANUP_MIN_AGE_HOURS: int(0, 24 * 365).default(24),
@@ -102,6 +122,8 @@ export interface Config {
   webDir?: string | null;
   disableBackground: boolean;
   registryInsecure: string[];
+  /** registry host -> token-service hostnames it may use (QM_REGISTRY_TOKEN_REALMS, `registry=tokenhost`). */
+  registryTokenRealms: Record<string, string[]>;
   checkTtlMs: number;
   rollbackRetentionMs: number;
   cleanupMinAgeMs: number;
@@ -250,6 +272,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webDir: e.QM_WEB_DIR ? path.resolve(e.QM_WEB_DIR) : null,
     disableBackground: e.QM_DISABLE_BACKGROUND,
     registryInsecure: e.QM_REGISTRY_INSECURE,
+    registryTokenRealms: parseTokenRealms(e.QM_REGISTRY_TOKEN_REALMS),
     checkTtlMs: e.QM_CHECK_TTL_MINUTES * 60_000,
     rollbackRetentionMs: e.QM_ROLLBACK_RETENTION_DAYS * 86_400_000,
     cleanupMinAgeMs: e.QM_CLEANUP_MIN_AGE_HOURS * 3_600_000,

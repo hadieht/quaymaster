@@ -56,7 +56,21 @@ export const DEFAULT_REALM_ALLOW: Record<string, string[]> = {
   'lscr.io': ['ghcr.io'],
   'registry.gitlab.com': ['gitlab.com'],
   'public.ecr.aws': ['public.ecr.aws'],
+  // docker.n8n.io is fronted by Docker Hub and hands out tokens from Docker Hub's auth service
+  'docker.n8n.io': ['auth.docker.io'],
 };
+
+/** Union per registry: configured token hosts add to the built-in ones, they never replace them. */
+export function mergeRealmAllow(
+  base: Record<string, string[]>,
+  extra: Record<string, string[]>,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(base)) out[k.toLowerCase()] = [...v];
+  for (const [k, v] of Object.entries(extra))
+    out[k.toLowerCase()] = [...new Set([...(out[k.toLowerCase()] ?? []), ...v])];
+  return out;
+}
 
 export interface ManifestHead {
   digest: string;
@@ -134,7 +148,7 @@ export class RegistryClient {
       maxRetries: opts.maxRetries ?? 2,
       maxBackoffMs: opts.maxBackoffMs ?? 60_000,
       timeoutMs: opts.timeoutMs ?? 15_000,
-      realmAllowList: { ...DEFAULT_REALM_ALLOW, ...(opts.realmAllowList ?? {}) },
+      realmAllowList: mergeRealmAllow(DEFAULT_REALM_ALLOW, opts.realmAllowList ?? {}),
     };
   }
 

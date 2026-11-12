@@ -6,7 +6,7 @@ through a controlled workflow: a dry-run plan, explicit approval, dependency-ord
 automatic rollback of the image where that is safe, and an audit trail for everything. Automation is opt-in; the
 default is to notify and ask.
 
-> **Status: 0.1.1, single host.** Docker socket access is root-equivalent on the host. Read the
+> **Status: 0.1.2, single host.** Docker socket access is root-equivalent on the host. Read the
 > [security model](#security-model) before you deploy. Do not expose Quaymaster to the internet.
 
 |                                                          |                                                            |
@@ -160,7 +160,7 @@ Prebuilt multi-architecture images (`linux/amd64`, `linux/arm64`) are published 
 
 | Tag                                 | Meaning                                                              |
 | ----------------------------------- | -------------------------------------------------------------------- |
-| `ghcr.io/hadieht/quaymaster:0.1.1`  | An exact release. **Recommended: pin one.**                          |
+| `ghcr.io/hadieht/quaymaster:0.1.2`  | An exact release. **Recommended: pin one.**                          |
 | `ghcr.io/hadieht/quaymaster:latest` | The newest tagged release.                                           |
 | `ghcr.io/hadieht/quaymaster:edge`   | The latest commit on `main`. Development builds, not for production. |
 
@@ -179,7 +179,7 @@ mv .env.new .env && chmod 600 .env
 # Back up the QM_SECRET_KEY line somewhere outside this server (password manager). Backups do not contain it.
 
 # edit .env: set QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory, e.g. /opt/stacks),
-# and pin DEPLOY_IMAGE=ghcr.io/hadieht/quaymaster:0.1.1
+# and pin DEPLOY_IMAGE=ghcr.io/hadieht/quaymaster:0.1.2
 
 sed -i "s/^DOCKER_GID=.*/DOCKER_GID=$(stat -c %g /var/run/docker.sock)/" .env   # the compose file needs it on every command
 docker compose up -d                                                  # COMPOSE_FILE / COMPOSE_ENV_FILES in .env point at deploy/
@@ -198,7 +198,7 @@ docker run -d --name quaymaster --restart unless-stopped \
   -e QM_HOST=0.0.0.0 -e QM_DATA_DIR=/data -e QM_SELF_CONTAINER=quaymaster -e QM_STACK_PATHS=/opt/stacks \
   -p 127.0.0.1:8787:8787 \
   -v quaymaster-data:/data -v /var/run/docker.sock:/var/run/docker.sock -v /opt/stacks:/opt/stacks \
-  ghcr.io/hadieht/quaymaster:0.1.1
+  ghcr.io/hadieht/quaymaster:0.1.2
 docker logs quaymaster 2>&1 | grep -i -B1 -A2 "setup"                 # one-time setup token
 ```
 
@@ -429,7 +429,7 @@ a directory on the Docker root's filesystem (mounted read-only). Without it the 
 
 **Does it update itself?** No. It refuses to touch its own container. Upgrade it as described above.
 
-**I lost the admin password.** There is no reset command in 0.1.1. See
+**I lost the admin password.** There is no reset command in 0.1.2. See
 [docs/OPERATIONS.md](docs/OPERATIONS.md#lost-admin-access).
 
 ## Development
@@ -452,7 +452,7 @@ Integration and end-to-end tests create **only** `qmtest-*` resources labelled `
 
 ## Limitations and roadmap
 
-Known limitations in 0.1.1:
+Known limitations in 0.1.2:
 
 - Single host only; no multi-host agents.
 - No two-factor authentication. Do not expose it to the internet.

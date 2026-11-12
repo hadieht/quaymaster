@@ -3,6 +3,16 @@
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-11-12
+
+### Fixed
+
+- `docker.n8n.io` images: its Docker Hub token service (`auth.docker.io`) is now an allowed token realm (was `refusing token realm on host auth.docker.io`).
+
+### Added
+
+- `QM_REGISTRY_TOKEN_REALMS` (`registry.host=token.host,...`) to allow the token service of other registries that delegate authentication to another host. Strictly validated; adds to the built-in list.
+
 ## [0.1.1] - 2026-11-12
 
 ### Added

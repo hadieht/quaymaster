@@ -233,6 +233,7 @@ async function build(
   const registry = new RegistryClient({
     credentials: (host) => registryCreds.get(host),
     insecureHosts: config.registryInsecure,
+    realmAllowList: config.registryTokenRealms,
   });
   const imageOps = new ImageOps({
     docker,
