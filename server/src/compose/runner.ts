@@ -40,7 +40,9 @@ export class ComposeRunner {
     return {
       PATH: process.env['PATH'] ?? '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
       HOME: process.env['HOME'] ?? '/root',
-      DOCKER_HOST: `unix://${this.d.config.dockerSocket}`,
+      DOCKER_HOST: this.d.config.dockerSocket.startsWith('tcp://')
+        ? this.d.config.dockerSocket
+        : `unix://${this.d.config.dockerSocket}`,
       LANG: 'C.UTF-8',
       ...(process.env['DOCKER_CONFIG'] ? { DOCKER_CONFIG: process.env['DOCKER_CONFIG'] } : {}),
     };

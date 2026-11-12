@@ -1,0 +1,10 @@
+# Caddy obtains and renews TLS certificates automatically. In .env set:
+#   QM_PUBLIC_ORIGIN=https://quaymaster.example.com
+#   QM_COOKIE_SECURE=true
+#   QM_TRUST_PROXY=<IP or CIDR of this Caddy>
+quaymaster.example.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:8787 {
+		flush_interval -1 # keep SSE / log streams unbuffered
+	}
+}

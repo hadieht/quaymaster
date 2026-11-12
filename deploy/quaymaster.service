@@ -1,0 +1,32 @@
+# Native (non-container) mode. See docs/DEPLOY.md for the install steps.
+[Unit]
+Description=Quaymaster Docker dashboard
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=quaymaster
+Group=quaymaster
+SupplementaryGroups=docker
+WorkingDirectory=/opt/quaymaster
+EnvironmentFile=/etc/quaymaster.env
+Environment=NODE_ENV=production QM_DATA_DIR=/var/lib/quaymaster
+ExecStart=/usr/bin/node server/dist/index.js
+Restart=on-failure
+RestartSec=5
+# Hardening. Compose projects must stay writable: list every stack directory in ReadWritePaths.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/quaymaster /opt/stacks
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

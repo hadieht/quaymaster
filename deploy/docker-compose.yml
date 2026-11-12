@@ -1,0 +1,54 @@
+# Quaymaster — container deployment.
+#   cp .env.example .env   (edit it; see docs/DEPLOY.md)
+#   DOCKER_GID=$(stat -c %g /var/run/docker.sock) docker compose --env-file .env -f deploy/docker-compose.yml up -d
+# The Docker socket is root-equivalent. Prefer docker-compose.socket-proxy.yml when you only need read-only mode.
+name: quaymaster
+services:
+  quaymaster:
+    image: ${DEPLOY_IMAGE:-quaymaster:dev}
+    container_name: quaymaster
+    restart: unless-stopped
+    user: "10001:10001"
+    # Socket access without root: join the host's docker group at run time (the image never hard-codes a GID).
+    group_add: ["${DOCKER_GID:?set DOCKER_GID to the group id of /var/run/docker.sock}"]
+    env_file: ../.env
+    environment:
+      QM_HOST: 0.0.0.0 # inside the container; exposure is controlled by the port mapping below
+      QM_DATA_DIR: /data
+      QM_DOCKER_SOCKET: /var/run/docker.sock
+      QM_SELF_CONTAINER: quaymaster # self-protection; also auto-detected from /proc/self/mountinfo
+    ports:
+      - "${DEPLOY_BIND:-127.0.0.1}:${DEPLOY_PORT:-8787}:8787"
+    volumes:
+      - quaymaster-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Stack directories at the IDENTICAL host path (Compose resolves relative bind mounts on the host).
+      # Read-write is required for Compose-based updates; add :ro for monitoring only. Must match QM_STACK_PATHS.
+      - ${DEPLOY_STACKS_DIR:-/opt/stacks}:${DEPLOY_STACKS_DIR:-/opt/stacks}
+      # Optional free-space checks: mount the Docker root read-only and set QM_DOCKER_ROOT_MOUNT to that path.
+      #   - /var/lib/docker:/var/lib/docker:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 256
+    labels:
+      quaymaster.role: "self" # informational marker
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+volumes:
+  quaymaster-data:

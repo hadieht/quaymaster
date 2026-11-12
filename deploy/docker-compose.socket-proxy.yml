@@ -1,0 +1,53 @@
+# Read-only Quaymaster behind a Docker socket proxy (tecnativa/docker-socket-proxy).
+# Quaymaster never sees the raw socket: QM_DOCKER_SOCKET=tcp://socket-proxy:2375 is reached over an internal network
+# and the proxy refuses every non-GET request (POST=0). Quaymaster additionally runs with QM_READ_ONLY=true.
+# Compose actions need the docker CLI against a writable daemon, so they are unavailable in this mode.
+name: quaymaster-ro
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest # pin a digest in production
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      INFO: 1
+      VERSION: 1
+      EVENTS: 1
+      SYSTEM: 1 # /system/df
+      POST: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [backend]
+    read_only: true
+    tmpfs: [/run]
+    security_opt: ["no-new-privileges:true"]
+  quaymaster:
+    image: ${DEPLOY_IMAGE:-quaymaster:dev}
+    restart: unless-stopped
+    user: "10001:10001"
+    env_file: ../.env
+    environment:
+      QM_HOST: 0.0.0.0
+      QM_DATA_DIR: /data
+      QM_DOCKER_SOCKET: tcp://socket-proxy:2375
+      QM_READ_ONLY: "true"
+      QM_PROTECTED: socket-proxy
+    depends_on: [socket-proxy]
+    ports:
+      - "${DEPLOY_BIND:-127.0.0.1}:${DEPLOY_PORT:-8787}:8787"
+    volumes:
+      - quaymaster-data:/data
+    networks: [backend, default]
+    read_only: true
+    tmpfs: ["/tmp:size=64m,mode=1777"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    mem_limit: 512m
+    cpus: 1.0
+networks:
+  backend:
+    internal: true
+volumes:
+  quaymaster-data:

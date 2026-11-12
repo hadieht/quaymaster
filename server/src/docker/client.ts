@@ -51,6 +51,15 @@ export interface DockerHandle {
   engineVersion: string;
 }
 
+/** `QM_DOCKER_SOCKET` is a unix socket path, or `tcp://host:port` (e.g. a socket proxy). */
+export function dockerodeOptions(
+  target: string,
+): { socketPath: string } | { host: string; port: number; protocol: 'http' } {
+  const m = /^tcp:\/\/([^:/]+):(\d{1,5})$/.exec(target);
+  if (m) return { host: m[1]!, port: Number(m[2]), protocol: 'http' };
+  return { socketPath: target };
+}
+
 /**
  * Creates the dockerode client with (1) transport-level enforcement of read-only mode and
  * authorised mutations and (2) API version negotiation. The first request is unversioned
@@ -60,7 +69,7 @@ export async function connectDocker(
   config: Pick<Config, 'dockerSocket'>,
   guard: Guard,
 ): Promise<DockerHandle> {
-  const docker = new Docker({ socketPath: config.dockerSocket });
+  const docker = new Docker(dockerodeOptions(config.dockerSocket));
   enforceOnModem(docker.modem as never, guard);
   let v: Awaited<ReturnType<Docker['version']>>;
   try {
