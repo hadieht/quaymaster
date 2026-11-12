@@ -5,11 +5,11 @@ import { redactDeep, redactLabels } from '../redaction/redact.js';
 import { badRequest, notFound } from '../util/errors.js';
 import type { ContainerService } from './containers.js';
 import { mapDockerError } from './containers.js';
-import { LABEL, learnSecrets, SAFE_REF_RE, shortId } from './model.js';
+import { isSafeRef, LABEL, learnSecrets, shortId } from './model.js';
 import type { DiskUsageService } from './system.js';
 
-const checkRef = (ref: string, what: string): void => {
-  if (!SAFE_REF_RE.test(ref) || ref.startsWith('-')) throw badRequest(`Invalid ${what} reference`);
+const checkRef = (ref: string, what: 'image' | 'volume' | 'network'): void => {
+  if (!isSafeRef(ref, what)) throw badRequest(`Invalid ${what} reference`);
 };
 
 /** Read-only image inventory (phase 1: list, inspect, usage). */

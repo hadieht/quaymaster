@@ -281,6 +281,7 @@ export class AuthService {
   }
 
   async changePassword(ctx: AuthContext, current: string, next: string): Promise<void> {
+    if (!ctx?.user) throw new AppError(401, 'unauthorized', 'Authentication required');
     PasswordService.validateStrength(next);
     if (!(await this.d.passwords.verify(current, ctx.user.password_hash))) {
       throw new AppError(403, 'forbidden', 'Current password is incorrect');

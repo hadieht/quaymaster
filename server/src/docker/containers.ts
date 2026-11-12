@@ -7,7 +7,7 @@ import { redactDeep } from '../redaction/redact.js';
 import { type Guard, withPermit } from '../security/guard.js';
 import { AppError, badRequest, conflict, notFound } from '../util/errors.js';
 import { cleanLogLine, demuxBuffer, LogDemuxer, type LogLine, RateLimitedPump } from './logs.js';
-import { LABEL, learnSecrets, SAFE_REF_RE, toSummary } from './model.js';
+import { isSafeRef, LABEL, learnSecrets, toSummary } from './model.js';
 
 export interface Actor {
   name: string;
@@ -138,7 +138,7 @@ export class ContainerService {
 
   /** Resolves any user-supplied reference to the full ID via inspect (RT-03: resolve → check → act). */
   async resolve(ref: string): Promise<ResolvedContainer> {
-    if (!SAFE_REF_RE.test(ref) || ref.startsWith('-')) throw badRequest('Invalid container reference');
+    if (!isSafeRef(ref, 'container')) throw badRequest('Invalid container reference');
     let raw: Dockerode.ContainerInspectInfo;
     try {
       raw = await this.d.docker.getContainer(ref).inspect();

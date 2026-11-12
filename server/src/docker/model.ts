@@ -43,6 +43,17 @@ export const shortId = (id: string): string => id.replace(/^sha256:/, '').slice(
 
 /** Valid container/image/volume/network reference as typed by a user: no flags, no path tricks. */
 export const SAFE_REF_RE = /^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,254}$/;
+/** Container, volume and network names/IDs never contain "/" (audit C-02: path traversal into the Engine API). */
+export const SAFE_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$/;
+
+/** True for a reference that is safe to splice into an Engine API URL path. */
+export function isSafeRef(ref: string, kind: 'container' | 'volume' | 'network' | 'image'): boolean {
+  if (typeof ref !== 'string') return false;
+  if (kind !== 'image') return SAFE_NAME_RE.test(ref);
+  if (!SAFE_REF_RE.test(ref)) return false;
+  // no empty or dot path segments: docker-modem would build /images/x/../../version/json
+  return ref.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
+}
 
 export function toSummary(c: Dockerode.ContainerInfo, guard: Guard): ContainerSummary {
   const labels = c.Labels ?? {};

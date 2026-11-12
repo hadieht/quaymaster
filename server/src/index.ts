@@ -43,6 +43,20 @@ async function main(): Promise<void> {
   };
   process.on('SIGTERM', () => stop('SIGTERM'));
   process.on('SIGINT', () => stop('SIGINT'));
+  // A stray exception in a library callback must not take the process down in the middle of an
+  // update window (audit C-02): log it and keep serving; the health gate and reconciliation rely on us.
+  process.on('uncaughtException', (err) => {
+    ctx.log.error(
+      { err: { message: err.message, code: (err as { code?: string }).code } },
+      'uncaught exception (continuing)',
+    );
+  });
+  process.on('unhandledRejection', (reason) => {
+    ctx.log.error(
+      { reason: reason instanceof Error ? reason.message : String(reason) },
+      'unhandled rejection (continuing)',
+    );
+  });
 }
 
 main().catch((e: unknown) => {

@@ -103,6 +103,22 @@ export function requirePerm(ctx: AppContext, perm: Permission) {
   };
 }
 
+/**
+ * The request path as the router sees it: query removed and percent-escapes decoded (bounded,
+ * so double-encoding cannot hide a prefix). Auth decisions MUST use this, never the raw `req.url`
+ * (audit C-01: `/%61pi/v1/...` is routed to the API but does not start with "/api").
+ * Dot segments are deliberately NOT collapsed: the router does not collapse them either.
+ */
+export function canonicalPath(req: FastifyRequest): string {
+  let p = (req.url.split('?')[0] ?? '').replace(/\\/g, '/');
+  try {
+    for (let i = 0; i < 3 && /%[0-9a-fA-F]{2}/.test(p); i++) p = decodeURIComponent(p);
+  } catch {
+    throw new AppError(400, 'validation', 'Malformed URL');
+  }
+  return p.replace(/^\/{2,}/, '/');
+}
+
 export function actorOf(req: FastifyRequest): { name: string; ip: string | null } {
   return { name: req.auth?.user.username ?? 'anonymous', ip: req.ip };
 }
@@ -129,10 +145,12 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
   app.addHook('onRequest', async (req, reply) => {
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) reply.header(k, v);
     if (config.cookieSecure) reply.header('Strict-Transport-Security', 'max-age=15552000; includeSubDomains');
-    const url = req.url.split('?')[0] ?? '';
-    if (url.startsWith('/api/') || url === '/healthz') reply.header('Cache-Control', 'no-store');
+    const url = canonicalPath(req);
+    if (url.toLowerCase().startsWith('/api/') || url === '/healthz')
+      reply.header('Cache-Control', 'no-store');
 
-    const isApi = url.startsWith('/api/v1/');
+    // Fail closed: anything under /api/ (however spelled) or routed to an /api/ route needs auth.
+    const isApi = url.toLowerCase().startsWith('/api/') || (req.routeOptions?.url ?? '').startsWith('/api/');
     if (isApi && !PUBLIC_PATHS.has(url)) {
       const token = parseCookies(req.headers.cookie)[cname];
       req.auth = ctx.auth.authenticate(token);
@@ -161,7 +179,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     // Account endpoints never carry container data; scrubbing them would turn a short learned value
     // such as "admin" into a masked username/role and break the UI (see docs/DECISIONS.md).
     const type = String(reply.getHeader('content-type') ?? '');
-    const accountPath = /^\/api\/v1\/(auth|users)(\/|\?|$)/.test(req.url);
+    const accountPath = /^\/api\/v1\/(auth|users)(\/|$)/.test(canonicalPath(req));
     if (
       !accountPath &&
       typeof payload === 'string' &&

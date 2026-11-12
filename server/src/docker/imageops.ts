@@ -3,8 +3,9 @@ import type { AuditService } from '../audit/audit.js';
 import type { RegistryCredentialsRepo, StagedRepo } from '../db/updates.js';
 import { engineName, parseImageRef, stagedTag, type ImageRef } from '../registry/reference.js';
 import { withPermit } from '../security/guard.js';
-import { AppError } from '../util/errors.js';
+import { AppError, badRequest } from '../util/errors.js';
 import { mapDockerError } from './containers.js';
+import { isSafeRef } from './model.js';
 
 export interface PullProgress {
   status: string;
@@ -54,6 +55,7 @@ export class ImageOps {
   }
 
   async inspect(nameOrId: string): Promise<Dockerode.ImageInspectInfo | null> {
+    if (!isSafeRef(nameOrId, 'image')) throw badRequest('Invalid image reference');
     try {
       return await this.d.docker.getImage(nameOrId).inspect();
     } catch (e) {

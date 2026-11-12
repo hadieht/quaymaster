@@ -156,6 +156,7 @@ export class SseHub extends EventEmitter {
   }
 
   open(_req: FastifyRequest, reply: FastifyReply, ctx: AuthContext): SseConnection {
+    if (!ctx?.session) throw new AppError(401, 'unauthorized', 'Authentication required');
     const perSession = [...this.streams.values()].filter(
       (s) => s.sessionIdHash === ctx.session.id_hash,
     ).length;
