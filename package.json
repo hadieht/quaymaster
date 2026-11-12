@@ -25,10 +25,13 @@
     "cli": "node server/dist/cli.js",
     "gen-secret": "node server/dist/cli.js gen-secret",
     "hash-password": "node server/dist/cli.js hash-password",
-    "start": "node server/dist/index.js"
+    "start": "node server/dist/index.js",
+    "e2e": "bash e2e/run.sh e2e",
+    "screenshots": "bash e2e/run.sh screenshots"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.64.0",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^10.0.0",
     "eslint-plugin-react-hooks": "^5.2.0",
