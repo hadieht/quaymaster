@@ -117,9 +117,9 @@ export async function main(argv: string[]): Promise<number> {
       if (!arg) throw new Error('usage: check <file.db>');
       const db = new Database(path.resolve(arg), { readonly: true, fileMustExist: true });
       const ok = db.pragma('integrity_check', { simple: true });
-      const v = db.pragma('user_version', { simple: true });
+      const v = (db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number | null }).v;
       db.close();
-      out(`integrity_check: ${String(ok)}; user_version: ${String(v)}`);
+      out(`integrity_check: ${String(ok)}; schema version: ${String(v)}`);
       return ok === 'ok' ? 0 : 1;
     }
 

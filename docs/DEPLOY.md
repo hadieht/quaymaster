@@ -65,7 +65,7 @@ docker cp quaymaster:/data/backup-$(date +%F).db ./
 # native
 QM_DATA_DIR=/var/lib/quaymaster node server/dist/cli.js backup /var/backups/quaymaster-$(date +%F).db
 
-# verify a file (integrity check + schema version)
+# verify a file (integrity check)
 docker exec quaymaster node server/dist/cli.js check /data/backup-YYYY-MM-DD.db
 
 # restore: STOP Quaymaster first. The CLI checks the file, refuses to run while Quaymaster holds the instance lock, checks the
