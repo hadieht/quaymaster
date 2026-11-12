@@ -349,3 +349,25 @@ Suggested command: `docker rmi nginx:latest quaymaster-staged/7e59ad64326b:165dd
 2. H-01 to H-04.
 3. M-01 to M-06.
 4. LOW.
+
+## Resolution (phase 5)
+
+| ID   | Status   | Commit / reason |
+| ---- | -------- | --------------- |
+| C-01 | fixed    | 9e5b126 — auth hook matches the canonicalised path; regression in `audit-02.int.test.ts` |
+| C-02 | fixed    | 9e5b126 — `isSafeRef` rejects traversal refs; process-level `uncaughtException` keep-alive; regression test |
+| H-01 | fixed    | 91c6738 — the scrubber only learns credential-like values (`learnable()`); unit + integration tests |
+| H-02 | fixed    | aec348a — pull moved to the service layer and bound to the managed scope |
+| H-03 | fixed    | 33a86c1 — manual actions refused while a maintenance run owns the project |
+| H-04 | fixed    | e96a1f2 — crash reconciliation treats a running-but-unhealthy service as critical (rollback policy applies) |
+| M-01 | fixed    | 7eadd47 — setup token claimed before the first await |
+| M-02 | fixed    | cc84564 |
+| M-03 | partial  | SSE null guard fixed; destroying the socket on stream error not done (low impact, see DECISIONS) |
+| M-04 | fixed    | cc84564 — password-change throttle |
+| M-05 | deferred | limiter state is in memory; persistence needs a design decision (DECISIONS.md) |
+| M-06 | pending  | owner approved the history rewrite; executed last, see the task hand-off |
+| L-04 | fixed    | cc84564 |
+| L-01, L-02, L-03, L-05, L-06 | deferred | dependency bumps (zod/react-router/uuid) and cosmetic items; DECISIONS.md |
+
+Found and fixed while packaging: a SIGKILLed container left a pid lock that blocked the next start (the new
+container could even get the same pid) — now hostname + heartbeat based (`instance-lock.test.ts`).

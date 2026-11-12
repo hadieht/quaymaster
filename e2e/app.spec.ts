@@ -25,7 +25,10 @@ test('first-run setup, logout, wrong password, login', async ({ page }) => {
   await page.getByRole('button', { name: /create|set up|finish/i }).click();
   await expect(page.getByRole('link', { name: 'Containers' }).first()).toBeVisible();
 
-  await page.getByRole('button', { name: /sign out|log out|logout/i }).first().click();
+  await page
+    .getByRole('button', { name: /sign out|log out|logout/i })
+    .first()
+    .click();
   await expect(page.getByRole('form', { name: 'Sign in' })).toBeVisible();
 
   await page.getByLabel('Username').fill('admin');

@@ -21,6 +21,10 @@ export default defineConfig({
   },
   projects: [
     { name: 'e2e', testMatch: /app\.spec\.ts/, use: { viewport: { width: 1440, height: 900 } } },
-    { name: 'screenshots', testMatch: /screenshots\.spec\.ts/, use: { viewport: { width: 1440, height: 900 } } },
+    {
+      name: 'screenshots',
+      testMatch: /screenshots\.spec\.ts/,
+      use: { viewport: { width: 1440, height: 900 } },
+    },
   ],
 });

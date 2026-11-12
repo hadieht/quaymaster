@@ -101,3 +101,17 @@ NOTE items RT-31 (version negotiation), RT-33 (Compose versions shown per projec
 - **Scrubber vs. account endpoints (bug found while integrating)**: the global known-value scrubber masks every learned secret literal in all JSON responses. A container whose password is a short common word (e.g. `admin`) made `/auth/me` return `username:"••••••", role:"••••••"`, so the UI treated the admin as a viewer. `/auth/*` and `/users*` responses are now exempt (they never contain container data); structural key-based redaction and log scrubbing are unchanged. Regression test in `webui.int.test.ts`.
 - **Stats prune bug (found in the browser walkthrough):** `StatsRepo.prune` used `rowid`, but `stats_rollups` is `WITHOUT ROWID`, so the periodic prune threw `no such column: rowid`. It now deletes by the `(container_id, minute)` key; regression test in `server/test/unit/stats-repo.test.ts`.
 - **Accessibility:** clickable table rows are keyboard-operable (tabindex, Enter/Space). Stat cards put the icon inline with the label so long labels and values never overlap or wrap.
+
+## Phase 5: hardening and packaging
+
+- **uncaughtException policy:** the process logs and keeps running (the update engine must not die mid-update); only startup errors exit.
+- **Scrubber (`learnable()`):** only values that look like credentials (length, entropy, key-name hint) are learned, so short or ordinary values (years, image names) are never blanked everywhere.
+- **Pull scope:** `/images/pull` is allowed only for references used by an in-scope container (repository match), through the service layer.
+- **Maintenance gate:** while a run is active on a project, manual container/compose actions on it are refused (409).
+- **`QM_VISIBLE_SCOPE`:** a read-side glob filter (containers, projects, events, images used by visible containers). Independent from `QM_MANAGED_SCOPE`; used for demos and screenshots.
+- **`QM_DOCKER_SOCKET=tcp://host:port`** is accepted so Quaymaster can sit behind a socket proxy (read-only deployment).
+- **Container free-space check:** the server fails closed when it cannot determine free space; in a container `QM_DOCKER_ROOT_MOUNT` must point to any directory on the Docker root's filesystem (the Docker root itself is mode 710 and unreadable for uid 10001).
+- **Instance lock:** pid files are unreliable across container restarts; the lock now carries the hostname and is refreshed every 5 s (stale after 20 s).
+- **Test environment:** the containerised verification ran with `--network host` (the fixture registry listens on host 127.0.0.1) and fixtures copied to a neutral path outside `/root` (mode 700, not traversable by the non-root user). Production uses the bridge network as in `deploy/`.
+- **Playwright:** `@playwright/test` 1.64 is a root devDependency; `E2E_CHROMIUM` can point to an installed Chromium.
+- **Deferred:** M-05 (persist rate-limiter state), M-03 socket destroy, L-01 (npm audit: zod, react-router, uuid bumps), L-02, L-03, L-05, L-06.

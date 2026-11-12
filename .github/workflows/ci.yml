@@ -1,0 +1,41 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      # Unit tests only: integration tests need a Docker daemon with the qmtest-* fixtures.
+      - run: npm run test:unit
+      - run: npm run test -w web
+      - run: npm run build
+      - name: Docker image build (no push)
+        run: docker build -t quaymaster:ci .
+      - name: Image smoke test (no Docker socket)
+        run: |
+          docker run --rm quaymaster:ci node server/dist/cli.js gen-secret | grep -q '^QM_SECRET_KEY='
+          docker run --rm quaymaster:ci docker compose version
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (full history)
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest detect --source /repo --redact --no-banner
