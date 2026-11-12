@@ -163,3 +163,34 @@ describe('H-03 manual actions are refused while a maintenance run holds the lock
     expect(JSON.stringify(after.body)).not.toContain('maintenance run is active');
   });
 });
+
+describe('H-04 crash reconciliation treats an unhealthy running service as broken', () => {
+  it('flags unhealthy (critical path) and says so in the guidance', async () => {
+    const svc = t.ctx.maintenance as unknown as {
+      describeCompose(
+        run: unknown,
+        it: unknown,
+        all: unknown[],
+      ): Promise<{ guidance: string[]; down: boolean; unhealthy?: boolean; unverified: boolean }>;
+    };
+    const run = { target: 'qmtest-h04', plan: null };
+    const intent = { service: 'app', action: 'deploy', fromImage: 'sha256:aaa', toImage: 'sha256:bbb' };
+    const mk = (status: string) => [
+      {
+        Id: 'c1',
+        State: 'running',
+        Status: status,
+        ImageID: 'sha256:bbb',
+        Labels: { 'com.docker.compose.project': 'qmtest-h04', 'com.docker.compose.service': 'app' },
+      },
+    ];
+    const bad = await svc.describeCompose(run, intent, mk('Up 5 seconds (unhealthy)'));
+    expect(bad.down).toBe(false);
+    expect(bad.unhealthy).toBe(true);
+    expect(bad.unverified).toBe(false);
+    expect(bad.guidance.join(' ')).toMatch(/UNHEALTHY/);
+    const ok = await svc.describeCompose(run, intent, mk('Up 5 seconds (healthy)'));
+    expect(ok.unhealthy).toBe(false);
+    expect(ok.unverified).toBe(true);
+  });
+});

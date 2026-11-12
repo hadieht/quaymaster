@@ -28,7 +28,7 @@ import type {
   WindowsRepo,
 } from '../db/maintenance.js';
 import type { Actor, ContainerService } from '../docker/containers.js';
-import { LABEL } from '../docker/model.js';
+import { healthFromStatus, LABEL } from '../docker/model.js';
 import type { ImageOps } from '../docker/imageops.js';
 import type { OperationManager } from '../operations/manager.js';
 import { engineName, parseImageRef } from '../registry/reference.js';
@@ -633,7 +633,7 @@ export class MaintenanceService {
             ? this.describeStandalone(it, all)
             : await this.describeCompose(run, it, all);
         guidance.push(...r.guidance);
-        if (r.down) leftDown = true;
+        if (r.down || r.unhealthy) leftDown = true;
         else if (r.unverified) unverified = true;
         if (r.down) {
           this.d.notify({
@@ -642,6 +642,14 @@ export class MaintenanceService {
             title: `Service left down after a crash: ${r.title}`,
             message: `Quaymaster stopped while it was updating ${it.service}; the service is not running. Recovery: see run ${run.id}.`,
             dedupeKey: `leftdown:${run.id}:${it.service}`,
+          });
+        } else if (r.unhealthy) {
+          this.d.notify({
+            type: 'service.left_down',
+            severity: 'critical',
+            title: `Service left unhealthy after a crash: ${r.title}`,
+            message: `Quaymaster stopped while it was updating ${it.service}; the service is running but Docker reports it UNHEALTHY. It was not rolled back automatically after the restart. Recovery: see run ${run.id}.`,
+            dedupeKey: `leftunhealthy:${run.id}:${it.service}`,
           });
         } else if (r.unverified) {
           this.d.notify({
@@ -721,12 +729,15 @@ export class MaintenanceService {
     run: RunRow,
     it: IntentRow,
     all: Dockerode.ContainerInfo[],
-  ): Promise<{ guidance: string[]; down: boolean; unverified: boolean; title: string }> {
+  ): Promise<{ guidance: string[]; down: boolean; unhealthy?: boolean; unverified: boolean; title: string }> {
     const project = run.target;
     const live = all.filter(
       (c) => c.Labels?.[LABEL.project] === project && c.Labels?.[LABEL.service] === it.service,
     );
     const down = live.length === 0 || live.some((c) => c.State !== 'running');
+    // H-04: a running container that Docker reports unhealthy is a broken service, not an unverified one
+    const unhealthy = !down && live.some((c) => healthFromStatus(c.Status) === 'unhealthy');
+    const healthNote = unhealthy ? ' Docker reports it UNHEALTHY.' : '';
     const short = (x: string | null | undefined): string => x?.slice(0, 19) ?? '?';
     const onFrom = it.fromImage !== null && live.length > 0 && live.every((c) => c.ImageID === it.fromImage);
     const onTo = it.toImage !== null && live.length > 0 && live.every((c) => c.ImageID === it.toImage);
@@ -739,13 +750,13 @@ export class MaintenanceService {
             ? 'the new image'
             : 'a different image';
     const guidance = [
-      `${it.service}: interrupted during "${it.action}" (from ${short(it.fromImage)} to ${short(it.toImage)}); it is currently ${down ? 'NOT running' : 'running'} on ${where}.`,
+      `${it.service}: interrupted during "${it.action}" (from ${short(it.fromImage)} to ${short(it.toImage)}); it is currently ${down ? 'NOT running' : 'running'} on ${where}.${healthNote}`,
     ];
     const s = run.plan?.services.find((x) => x.service === it.service);
     const ref = s ? parseImageRef(s.ref) : null;
     const needsRestore = it.fromImage !== null && !onFrom;
     const tagMayBeMoved = it.action === 'deploy' && it.toImage !== null;
-    if (down || needsRestore || tagMayBeMoved) {
+    if (down || unhealthy || needsRestore || tagMayBeMoved) {
       try {
         const { target } = await this.d.compose.targetOf(project);
         const files = target.files.map((f) => `--file ${shQuote(f)}`).join(' ');
@@ -753,7 +764,7 @@ export class MaintenanceService {
         const tagCmd =
           s && repoTag && it.fromImage ? `docker tag ${s.fromImageId} ${shQuote(repoTag)}` : null;
         if (tagCmd) guidance.push('Put the shared tag back on the previous image:', tagCmd);
-        if (down || needsRestore)
+        if (down || unhealthy || needsRestore)
           guidance.push(
             `docker compose --project-name ${shQuote(project)} --project-directory ${shQuote(target.workingDir)} ${files} up -d --no-deps --pull never --no-build -- ${shQuote(it.service ?? '')}`,
           );
@@ -766,7 +777,8 @@ export class MaintenanceService {
     return {
       guidance,
       down,
-      unverified: !down && (needsRestore || it.action === 'deploy'),
+      unhealthy,
+      unverified: !down && !unhealthy && (needsRestore || it.action === 'deploy'),
       title: `${project}/${it.service}`,
     };
   }
@@ -775,7 +787,7 @@ export class MaintenanceService {
   private describeStandalone(
     it: IntentRow,
     all: Dockerode.ContainerInfo[],
-  ): { guidance: string[]; down: boolean; unverified: boolean; title: string } {
+  ): { guidance: string[]; down: boolean; unhealthy?: boolean; unverified: boolean; title: string } {
     const name = it.service ?? '';
     const nameOf = (c: Dockerode.ContainerInfo): string => (c.Names?.[0] ?? '').replace(/^\//, '');
     const oldId = it.containerIdsBefore[0];
