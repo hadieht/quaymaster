@@ -53,6 +53,9 @@ policy then keeps relaunching it.
 
 Edit `.env`:
 
+- `QM_PUBLIC_ORIGIN` - **required as soon as you reach the UI by anything other than `127.0.0.1`/`localhost`**
+  (LAN IP, hostname, Tailscale). Comma-separated, scheme and port included, e.g.
+  `http://127.0.0.1:8787,http://192.168.1.50:8787`. Otherwise first login fails with "Missing or unexpected Origin header".
 - `QM_SECRET_KEY` - already written by the commands above. **Store a copy outside the server** (password manager):
   backups do not contain it.
 - `QM_STACK_PATHS` - absolute directories that contain your Compose projects, e.g. `/opt/stacks`.

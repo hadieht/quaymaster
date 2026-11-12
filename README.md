@@ -406,6 +406,12 @@ browser's address bar, including scheme and port.
 
 **Login returns 429 for everyone.** You are behind a proxy without `QM_TRUST_PROXY`. Set it to the proxy's address.
 
+**`Missing or unexpected Origin header` on the setup or login page.** Quaymaster only accepts state-changing requests
+whose browser origin it knows. By default that is `127.0.0.1`/`localhost` on the port. If you open it by a LAN IP,
+a hostname or a Tailscale address, list every address you use (scheme and port included, no path) in `.env`, then
+recreate the container: `QM_PUBLIC_ORIGIN=http://127.0.0.1:8787,http://192.168.1.50:8787,http://myserver:8787`.
+Behind a TLS proxy use its `https://` address instead.
+
 **`required variable DOCKER_GID is missing a value`.** Set `DOCKER_GID` in `.env` (`sed -i "s/^DOCKER_GID=.*/DOCKER_GID=$(stat -c %g /var/run/docker.sock)/" .env`) and run `docker compose` from the folder that holds `.env`; it also needs `COMPOSE_FILE` and `COMPOSE_ENV_FILES` from `.env.example`.
 
 **"Permission denied" on the Docker socket.** `DOCKER_GID` is wrong. Use `stat -c %g /var/run/docker.sock`.
