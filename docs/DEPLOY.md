@@ -1,5 +1,7 @@
 # Deploying Quaymaster
 
+> The task-oriented guides are [INSTALL](INSTALL.md), [CONFIGURATION](CONFIGURATION.md) and [OPERATIONS](OPERATIONS.md); this page is the original deployment reference.
+
 Two supported modes: **container** (recommended) and **native** (systemd). Both read the same `.env`
 (`.env.example` has every variable; placeholders only).
 

@@ -8,11 +8,11 @@ Quaymaster needs access to the Docker socket, which is root-equivalent on the ho
 
 ## Requirements
 
-| | Container mode | Native mode |
-| --- | --- | --- |
-| Host | Linux with Docker Engine and the Compose plugin | same |
+|       | Container mode                                                  | Native mode                                                                                            |
+| ----- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Host  | Linux with Docker Engine and the Compose plugin                 | same                                                                                                   |
 | Extra | nothing (the image ships the Docker CLI and the Compose plugin) | Node.js 22+, `docker` CLI with `docker compose`, `python3`, `make`, `g++` (to build the SQLite module) |
-| Disk | a few hundred MB for the image, plus a small data volume | similar |
+| Disk  | a few hundred MB for the image, plus a small data volume        | similar                                                                                                |
 
 ## 1. Get the code and build the image
 

@@ -9,11 +9,11 @@ default is to notify and ask.
 > **Status: 0.1.0, single host.** Docker socket access is root-equivalent on the host. Read the
 > [security model](#security-model) before you deploy. Do not expose Quaymaster to the internet.
 
-| | |
-| --- | --- |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Containers](docs/screenshots/containers.png) |
+|                                                          |                                                            |
+| -------------------------------------------------------- | ---------------------------------------------------------- |
+| ![Dashboard](docs/screenshots/dashboard.png)             | ![Containers](docs/screenshots/containers.png)             |
 | ![Compose project](docs/screenshots/compose-project.png) | ![Maintenance plan](docs/screenshots/maintenance-plan.png) |
-| ![Approval](docs/screenshots/maintenance-approval.png) | ![Run history](docs/screenshots/run-history.png) |
+| ![Approval](docs/screenshots/maintenance-approval.png)   | ![Run history](docs/screenshots/run-history.png)           |
 
 More: [container detail](docs/screenshots/container-detail.png), [logs](docs/screenshots/container-logs.png),
 [images](docs/screenshots/images.png), [settings](docs/screenshots/settings.png),
@@ -193,49 +193,49 @@ protection), and invalid values stop the server with a message that names the va
 `QM_STACK_PATHS` are required. [`.env.example`](.env.example) lists everything;
 [docs/CONFIGURATION.md](docs/CONFIGURATION.md) explains each variable.
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `QM_HOST` | `127.0.0.1` | Bind address. The container image sets `0.0.0.0`; exposure is then set by the port mapping. |
-| `QM_PORT` | `8787` | Listen port. |
-| `QM_PUBLIC_ORIGIN` | derived from host/port | Exact browser origin(s), comma-separated, for the CSRF `Origin` check. Bare origins only, e.g. `https://qm.example.org`. |
-| `QM_TRUST_PROXY` | empty | IPs/CIDRs of reverse proxies whose `X-Forwarded-For` is trusted. `true`, `*` and `0.0.0.0/0` are rejected. |
-| `QM_COOKIE_SECURE` | `false` | Set `true` behind HTTPS: `Secure` cookie, `__Host-` prefix, HSTS. |
-| `QM_DATA_DIR` | `./data` | Database, lock file, setup token. `/data` in the image. |
-| `QM_SECRET_KEY` | none | **Required** (or `QM_SECRET_KEY_FILE`). At least 32 random bytes, hex or base64. |
-| `QM_SECRET_KEY_FILE` | none | File containing the key. |
-| `QM_ADMIN_USER` | none | First admin name; used only while there are no users. |
-| `QM_ADMIN_PASSWORD_HASH` | none | scrypt hash for that admin. Not together with the file variant. |
-| `QM_ADMIN_PASSWORD_FILE` | none | File with a plain password, hashed at first start. |
-| `QM_DOCKER_SOCKET` | `/var/run/docker.sock` | Socket path, or `tcp://host:port` for a socket proxy. |
-| `QM_DOCKER_BIN` | `docker` | Docker CLI used for Compose. |
-| `QM_STACK_PATHS` | none | **Required.** Absolute directories that may contain Compose projects. The only allow-list for file-level operations. |
-| `QM_DOCKER_ROOT_MOUNT` | none | Any directory on the Docker root's filesystem, for free-space checks (container mode). |
-| `QM_READ_ONLY` | `false` | Disable every mutating action. |
-| `QM_MANAGED_SCOPE` | empty (all) | Name globs that may be mutated. |
-| `QM_VISIBLE_SCOPE` | empty (all) | Name globs of resources that are visible at all (demos, screenshots). |
-| `QM_PROTECTED` | empty | Names that are never mutated (reverse proxy, socket proxy). |
-| `QM_SELF_CONTAINER` | auto-detected | Name or ID of Quaymaster's own container. |
-| `QM_REDACT_ALL_ENV` | `false` | Mask every environment value. |
-| `QM_SESSION_IDLE_MINUTES` | `30` | Idle session timeout. |
-| `QM_SESSION_ABSOLUTE_HOURS` | `12` | Absolute session lifetime. |
-| `QM_SSE_MAX_PER_SESSION` | `8` | Live streams per session. |
-| `QM_SSE_MAX_TOTAL` | `32` | Live streams in total. |
-| `QM_LOG_FOLLOW_BYTES_PER_SEC` | `524288` | Rate cap for log follow streams. |
-| `QM_SCRYPT_LOG2_N` | `17` | scrypt cost (log2 N). Below 14 only with `NODE_ENV=test`. |
-| `QM_STATS_INTERVAL_SECONDS` | `10` | Stats sampling interval. |
-| `QM_STATS_RETENTION_HOURS` | `48` | Stats retention. |
-| `QM_EVENT_RETENTION_DAYS` | `14` | Docker event retention. |
-| `QM_AUDIT_RETENTION_DAYS` | `365` | Audit retention. Minimum 30. |
-| `QM_DISK_FLOOR_BYTES` | `5368709120` | Free space that must remain on the Docker root when pulling. |
-| `QM_DF_MIN_INTERVAL_SECONDS` | `21600` | Minimum interval between `system df` runs. |
-| `QM_LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`. |
-| `QM_DISABLE_BACKGROUND` | `false` | Skip event watcher, stats sampler, housekeeping (diagnostics only). |
-| `QM_WEB_DIR` | built-in | Directory with the web bundle. |
-| `QM_REGISTRY_INSECURE` | empty | Hosts allowed over plain HTTP (local registries). |
-| `QM_CHECK_TTL_MINUTES` | `360` | Cache lifetime of registry checks. |
-| `QM_ROLLBACK_RETENTION_DAYS` | `7` | How long rollback images are kept. |
-| `QM_CLEANUP_MIN_AGE_HOURS` | `24` | Cleanup never touches younger items. |
-| `QM_APPROVAL_EXPIRY_HOURS` | `72` | Approvals expire after this. |
+| Variable                      | Default                | Purpose                                                                                                                  |
+| ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `QM_HOST`                     | `127.0.0.1`            | Bind address. The container image sets `0.0.0.0`; exposure is then set by the port mapping.                              |
+| `QM_PORT`                     | `8787`                 | Listen port.                                                                                                             |
+| `QM_PUBLIC_ORIGIN`            | derived from host/port | Exact browser origin(s), comma-separated, for the CSRF `Origin` check. Bare origins only, e.g. `https://qm.example.org`. |
+| `QM_TRUST_PROXY`              | empty                  | IPs/CIDRs of reverse proxies whose `X-Forwarded-For` is trusted. `true`, `*` and `0.0.0.0/0` are rejected.               |
+| `QM_COOKIE_SECURE`            | `false`                | Set `true` behind HTTPS: `Secure` cookie, `__Host-` prefix, HSTS.                                                        |
+| `QM_DATA_DIR`                 | `./data`               | Database, lock file, setup token. `/data` in the image.                                                                  |
+| `QM_SECRET_KEY`               | none                   | **Required** (or `QM_SECRET_KEY_FILE`). At least 32 random bytes, hex or base64.                                         |
+| `QM_SECRET_KEY_FILE`          | none                   | File containing the key.                                                                                                 |
+| `QM_ADMIN_USER`               | none                   | First admin name; used only while there are no users.                                                                    |
+| `QM_ADMIN_PASSWORD_HASH`      | none                   | scrypt hash for that admin. Not together with the file variant.                                                          |
+| `QM_ADMIN_PASSWORD_FILE`      | none                   | File with a plain password, hashed at first start.                                                                       |
+| `QM_DOCKER_SOCKET`            | `/var/run/docker.sock` | Socket path, or `tcp://host:port` for a socket proxy.                                                                    |
+| `QM_DOCKER_BIN`               | `docker`               | Docker CLI used for Compose.                                                                                             |
+| `QM_STACK_PATHS`              | none                   | **Required.** Absolute directories that may contain Compose projects. The only allow-list for file-level operations.     |
+| `QM_DOCKER_ROOT_MOUNT`        | none                   | Any directory on the Docker root's filesystem, for free-space checks (container mode).                                   |
+| `QM_READ_ONLY`                | `false`                | Disable every mutating action.                                                                                           |
+| `QM_MANAGED_SCOPE`            | empty (all)            | Name globs that may be mutated.                                                                                          |
+| `QM_VISIBLE_SCOPE`            | empty (all)            | Name globs of resources that are visible at all (demos, screenshots).                                                    |
+| `QM_PROTECTED`                | empty                  | Names that are never mutated (reverse proxy, socket proxy).                                                              |
+| `QM_SELF_CONTAINER`           | auto-detected          | Name or ID of Quaymaster's own container.                                                                                |
+| `QM_REDACT_ALL_ENV`           | `false`                | Mask every environment value.                                                                                            |
+| `QM_SESSION_IDLE_MINUTES`     | `30`                   | Idle session timeout.                                                                                                    |
+| `QM_SESSION_ABSOLUTE_HOURS`   | `12`                   | Absolute session lifetime.                                                                                               |
+| `QM_SSE_MAX_PER_SESSION`      | `8`                    | Live streams per session.                                                                                                |
+| `QM_SSE_MAX_TOTAL`            | `32`                   | Live streams in total.                                                                                                   |
+| `QM_LOG_FOLLOW_BYTES_PER_SEC` | `524288`               | Rate cap for log follow streams.                                                                                         |
+| `QM_SCRYPT_LOG2_N`            | `17`                   | scrypt cost (log2 N). Below 14 only with `NODE_ENV=test`.                                                                |
+| `QM_STATS_INTERVAL_SECONDS`   | `10`                   | Stats sampling interval.                                                                                                 |
+| `QM_STATS_RETENTION_HOURS`    | `48`                   | Stats retention.                                                                                                         |
+| `QM_EVENT_RETENTION_DAYS`     | `14`                   | Docker event retention.                                                                                                  |
+| `QM_AUDIT_RETENTION_DAYS`     | `365`                  | Audit retention. Minimum 30.                                                                                             |
+| `QM_DISK_FLOOR_BYTES`         | `5368709120`           | Free space that must remain on the Docker root when pulling.                                                             |
+| `QM_DF_MIN_INTERVAL_SECONDS`  | `21600`                | Minimum interval between `system df` runs.                                                                               |
+| `QM_LOG_LEVEL`                | `info`                 | `fatal`, `error`, `warn`, `info`, `debug`, `trace`, `silent`.                                                            |
+| `QM_DISABLE_BACKGROUND`       | `false`                | Skip event watcher, stats sampler, housekeeping (diagnostics only).                                                      |
+| `QM_WEB_DIR`                  | built-in               | Directory with the web bundle.                                                                                           |
+| `QM_REGISTRY_INSECURE`        | empty                  | Hosts allowed over plain HTTP (local registries).                                                                        |
+| `QM_CHECK_TTL_MINUTES`        | `360`                  | Cache lifetime of registry checks.                                                                                       |
+| `QM_ROLLBACK_RETENTION_DAYS`  | `7`                    | How long rollback images are kept.                                                                                       |
+| `QM_CLEANUP_MIN_AGE_HOURS`    | `24`                   | Cleanup never touches younger items.                                                                                     |
+| `QM_APPROVAL_EXPIRY_HOURS`    | `72`                   | Approvals expire after this.                                                                                             |
 
 `DOCKER_GID`, `DEPLOY_BIND`, `DEPLOY_PORT`, `DEPLOY_STACKS_DIR` and `DEPLOY_IMAGE` in `.env.example` are read by
 `deploy/docker-compose.yml`, not by Quaymaster.
@@ -289,14 +289,14 @@ the per-IP login limiter can lock everyone out after a few failed attempts.
 
 Add channels under **Settings → Notifications** and use **Test** to send a test event.
 
-| Channel | Fields |
-| --- | --- |
-| Webhook | `url`; optional `secret` (adds `X-Quaymaster-Signature` and `X-Quaymaster-Timestamp` headers), optional custom `headers` |
-| ntfy | `serverUrl`, `topic`; optional `token` |
-| Gotify | `serverUrl`, `appToken` |
-| Discord, Slack | incoming-webhook `url` |
-| Telegram | `botToken`, `chatId`; optional `apiBase` |
-| SMTP | `host`, `port`, `secure`, `from`, `to` (list); optional `username`, `password` |
+| Channel        | Fields                                                                                                                   |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Webhook        | `url`; optional `secret` (adds `X-Quaymaster-Signature` and `X-Quaymaster-Timestamp` headers), optional custom `headers` |
+| ntfy           | `serverUrl`, `topic`; optional `token`                                                                                   |
+| Gotify         | `serverUrl`, `appToken`                                                                                                  |
+| Discord, Slack | incoming-webhook `url`                                                                                                   |
+| Telegram       | `botToken`, `chatId`; optional `apiBase`                                                                                 |
+| SMTP           | `host`, `port`, `secure`, `from`, `to` (list); optional `username`, `password`                                           |
 
 Each channel has a minimum severity (`info`, `warning`, `critical`) and an event list. Channel configuration is stored
 encrypted, and secrets and URLs are never returned. Outbound requests refuse link-local and cloud-metadata addresses;
