@@ -111,14 +111,22 @@ export class SetupService {
       throw new AppError(403, 'forbidden', 'Setup token expired; restart Quaymaster to issue a new one');
     }
     if (!safeEqual(input.token, this.token)) throw new AppError(403, 'forbidden', 'Invalid setup token');
-    const user = await this.d.auth.createUser({
-      username: input.username,
-      password: input.password,
-      role: 'admin',
-    });
+    // M-01: claim the token synchronously, BEFORE any await (the scrypt hash yields the event loop), so
+    // concurrent redemptions of the same token cannot each create an admin. Restored if creation fails.
+    const claimed = this.token;
     this.token = null;
-    this.removeFile();
-    clearTimeout(this.timer);
-    return user;
+    try {
+      const user = await this.d.auth.createUser({
+        username: input.username,
+        password: input.password,
+        role: 'admin',
+      });
+      this.removeFile();
+      clearTimeout(this.timer);
+      return user;
+    } catch (e) {
+      if (this.required()) this.token = claimed;
+      throw e;
+    }
   }
 }
