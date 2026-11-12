@@ -198,7 +198,11 @@ describe('H-04 crash reconciliation treats an unhealthy running service as broke
 describe('M-04 password change is throttled', () => {
   it('locks the current-password oracle after repeated failures on one session', async () => {
     (t.ctx.auth as unknown as { sleep: () => Promise<void> }).sleep = async () => undefined;
-    await t.ctx.auth.createUser({ username: 'pwthrottle', password: 'correct-horse-battery-1', role: 'admin' });
+    await t.ctx.auth.createUser({
+      username: 'pwthrottle',
+      password: 'correct-horse-battery-1',
+      role: 'admin',
+    });
     const who = await t.login('pwthrottle', 'correct-horse-battery-1');
     const codes: number[] = [];
     for (let i = 0; i < 7; i++) {

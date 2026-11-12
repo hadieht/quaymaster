@@ -361,7 +361,17 @@ describe('collectSecretValues and Scrubber (known-value scrubbing)', () => {
 describe('H-01 global scrubber does not blank unrelated data', () => {
   it('refuses to learn short, numeric, date-like or word-like values', () => {
     const sc = new Scrubber();
-    for (const v of ['2026', 'alpine', 'unhealthy', 'running', '20261112', '2026-11-12', 'rolled_back', 'latest']) sc.add(v);
+    for (const v of [
+      '2026',
+      'alpine',
+      'unhealthy',
+      'running',
+      '20261112',
+      '2026-11-12',
+      'rolled_back',
+      'latest',
+    ])
+      sc.add(v);
     expect(sc.size).toBe(0);
     const doc = '{"createdAt":"2026-11-12T01:00:00Z","image":"alpine:latest","health":"unhealthy"}';
     expect(sc.scrub(doc)).toBe(doc);
