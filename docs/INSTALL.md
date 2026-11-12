@@ -42,13 +42,19 @@ you can still build it yourself and set `DEPLOY_IMAGE` to your own tag.
 ```bash
 cp .env.example .env
 chmod 600 .env
-docker run --rm quaymaster:dev node server/dist/cli.js gen-secret      # QM_SECRET_KEY=...
+grep -v '^QM_SECRET_KEY=' .env > .env.new                                  # drop the blank line from the example
+docker run --rm quaymaster:dev node server/dist/cli.js gen-secret >> .env.new   # append QM_SECRET_KEY=...
+mv .env.new .env && chmod 600 .env
 ```
+
+(Use your image instead of `quaymaster:dev` if you pulled `ghcr.io/hadieht/quaymaster`.) Quaymaster will not start
+while `QM_SECRET_KEY` is empty; it exits with "QM_SECRET_KEY (or QM_SECRET_KEY_FILE) is required", and Docker's restart
+policy then keeps relaunching it.
 
 Edit `.env`:
 
-- `QM_SECRET_KEY` - paste the generated line's value. **Store a copy outside the server** (password manager): backups
-  do not contain it.
+- `QM_SECRET_KEY` - already written by the commands above. **Store a copy outside the server** (password manager):
+  backups do not contain it.
 - `QM_STACK_PATHS` - absolute directories that contain your Compose projects, e.g. `/opt/stacks`.
 - `DEPLOY_STACKS_DIR` - the same directory; the compose file mounts it at the identical path.
 - `QM_PUBLIC_ORIGIN`, `QM_COOKIE_SECURE`, `QM_TRUST_PROXY` - when you use a reverse proxy (step 5).

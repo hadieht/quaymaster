@@ -170,8 +170,13 @@ BASE=https://raw.githubusercontent.com/hadieht/quaymaster/main
 curl -fsSLo deploy/docker-compose.yml $BASE/deploy/docker-compose.yml
 curl -fsSLo .env $BASE/.env.example && chmod 600 .env
 
-docker run --rm ghcr.io/hadieht/quaymaster:latest node server/dist/cli.js gen-secret     # prints QM_SECRET_KEY=...; paste into .env
-# edit .env: set QM_SECRET_KEY, QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory, e.g. /opt/stacks),
+# Generate the secret key and write it into .env (Quaymaster refuses to start without it):
+grep -v '^QM_SECRET_KEY=' .env > .env.new
+docker run --rm ghcr.io/hadieht/quaymaster:latest node server/dist/cli.js gen-secret >> .env.new
+mv .env.new .env && chmod 600 .env
+# Back up the QM_SECRET_KEY line somewhere outside this server (password manager). Backups do not contain it.
+
+# edit .env: set QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory, e.g. /opt/stacks),
 # and pin DEPLOY_IMAGE=ghcr.io/hadieht/quaymaster:0.1.0
 
 DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
@@ -207,8 +212,10 @@ cd quaymaster
 docker build -t quaymaster:dev .
 
 cp .env.example .env && chmod 600 .env
-docker run --rm quaymaster:dev node server/dist/cli.js gen-secret     # prints QM_SECRET_KEY=...; paste into .env
-# edit .env: set QM_SECRET_KEY, QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory), and DEPLOY_IMAGE=quaymaster:dev
+grep -v '^QM_SECRET_KEY=' .env > .env.new                              # write the generated key into .env
+docker run --rm quaymaster:dev node server/dist/cli.js gen-secret >> .env.new
+mv .env.new .env && chmod 600 .env
+# edit .env: set QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory), and DEPLOY_IMAGE=quaymaster:dev
 
 DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
   docker compose --env-file .env -f deploy/docker-compose.yml up -d
@@ -382,6 +389,11 @@ start-up; the server refuses to start on a database written by a newer version. 
 [docs/OPERATIONS.md](docs/OPERATIONS.md#upgrading).
 
 ## Troubleshooting and FAQ
+
+**The container restarts in a loop.** Run `docker logs quaymaster`. The most common cause is a missing
+`QM_SECRET_KEY` ("QM_SECRET_KEY (or QM_SECRET_KEY_FILE) is required"): generate one as shown in the
+[Quick start](#quick-start), then recreate the container with `up -d --force-recreate` (`.env` is only read when the
+container is created).
 
 **The server exits at start-up.** Read `docker logs quaymaster`. The messages name the variable: missing
 `QM_SECRET_KEY` or `QM_STACK_PATHS`, a weak key, an unknown `QM_*` name, or a malformed `QM_TRUST_PROXY`.
