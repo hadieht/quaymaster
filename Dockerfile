@@ -75,7 +75,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 LABEL org.opencontainers.image.title="Quaymaster" \
       org.opencontainers.image.description="Docker management and maintenance dashboard" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.source="https://github.com/hadieht/quaymaster"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "server/dist/index.js"]

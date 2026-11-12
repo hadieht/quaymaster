@@ -1,0 +1,109 @@
+name: publish
+
+# Publishes the container image to GitHub Container Registry (ghcr.io/hadieht/quaymaster).
+#   - push of a version tag  vX.Y.Z  -> :X.Y.Z, :X.Y, :X and :latest   (the stable release)
+#   - push to main                   -> :edge and :sha-<commit>        (development builds, never :latest)
+#   - manual run (workflow_dispatch) -> same as the ref it is run on
+# Nothing is deployed to any server: users pull the image themselves. :latest only ever moves on a tagged release.
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Tag must match package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "${GITHUB_REF_NAME#v}" != "$pkg" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match package.json version ${pkg}"; exit 1
+          fi
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run test:unit
+      - run: npm run test -w web
+
+  image:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io with the workflow's own token; no personal access token is stored
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=edge,branch=main
+            type=sha,prefix=sha-
+          labels: |
+            org.opencontainers.image.title=Quaymaster
+            org.opencontainers.image.description=Docker management and maintenance dashboard
+      # Build and smoke-test the amd64 image locally BEFORE anything is pushed.
+      - name: Build amd64 image for the smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: quaymaster:smoke
+          cache-from: type=gha
+      - name: Smoke test (no Docker socket)
+        run: |
+          docker run --rm quaymaster:smoke node server/dist/cli.js gen-secret | grep -q '^QM_SECRET_KEY='
+          docker run --rm quaymaster:smoke docker compose version
+          docker run --rm --entrypoint id quaymaster:smoke -u | grep -qx 10001
+      - name: Build and push (linux/amd64, linux/arm64)
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+      - name: Summary
+        run: |
+          {
+            echo "### Published ${IMAGE}"
+            echo "Digest: \`${{ steps.push.outputs.digest }}\`"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
