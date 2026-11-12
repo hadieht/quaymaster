@@ -121,7 +121,8 @@ export class ContainerService {
             const e = {
               at: now,
               restartCount: r.RestartCount ?? 0,
-              startedAt: r.State?.StartedAt && !r.State.StartedAt.startsWith('0001') ? r.State.StartedAt : null,
+              startedAt:
+                r.State?.StartedAt && !r.State.StartedAt.startsWith('0001') ? r.State.StartedAt : null,
             };
             this.extrasCache.set(id, e);
             out.set(id, e);
