@@ -473,6 +473,19 @@ export function collectSecretValues(value: unknown, opts: Omit<RedactOptions, 's
 const TRIVIAL = new Set(['true', 'false', 'null', 'none', 'yes', 'info', 'warn', 'error', 'debug', 'trace']);
 
 /**
+ * Whether a secret-named value may be learned for GLOBAL literal scrubbing (audit H-01). A learned value is
+ * removed from every JSON response, so a short or common one (`2026`, `alpine`, `unhealthy`) would corrupt
+ * unrelated data, and any container can plant one. Such values are still masked where they sit under their
+ * own secret-named key (structured redaction); they are just not hunted for in free text.
+ */
+export function learnable(v: string): boolean {
+  if (v.length < 8) return false;
+  if (/^[\d\s:.,/\-T+Z]+$/.test(v)) return false; // numbers, dates, versions, timestamps
+  if (/^[A-Za-z_ -]+$/.test(v) && v.length < 20) return false; // a plain word / state name / image name
+  return true;
+}
+
+/**
  * Removes literal secret values (and their URL-encoded / JSON-escaped forms) from free text:
  * captured CLI output, error messages, event attributes, log lines.
  */
@@ -481,11 +494,11 @@ export class Scrubber {
   private sorted: string[] = [];
 
   add(secret: string | undefined | null): void {
-    if (!secret) return;
+    if (!secret || !learnable(secret)) return;
     const forms = new Set<string>([secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)]);
     let changed = false;
     for (const f of forms) {
-      if (f.length < 4 || TRIVIAL.has(f.toLowerCase()) || f === MASK || this.values.has(f)) continue;
+      if (TRIVIAL.has(f.toLowerCase()) || f === MASK || this.values.has(f)) continue;
       this.values.add(f);
       changed = true;
     }

@@ -347,13 +347,30 @@ describe('collectSecretValues and Scrubber (known-value scrubbing)', () => {
     sc.add('true');
     sc.add('ab');
     expect(sc.size).toBe(0);
-    sc.add('hunter');
-    sc.add('hunter2');
-    expect(sc.scrub('x hunter2 y')).toBe(`x ${MASK} y`);
+    sc.add('hunter-hunter');
+    sc.add('hunter2hunter2');
+    expect(sc.scrub('x hunter2hunter2 y')).toBe(`x ${MASK} y`);
   });
   it('clean() applies both scrubbing and text rules', () => {
     const sc = new Scrubber();
-    sc.add('plainvalue');
-    expect(sc.clean('plainvalue and --token=abc')).toBe(`${MASK} and --token=${MASK}`);
+    sc.add('plain-value-1');
+    expect(sc.clean('plain-value-1 and --token=abc')).toBe(`${MASK} and --token=${MASK}`);
+  });
+});
+
+describe('H-01 global scrubber does not blank unrelated data', () => {
+  it('refuses to learn short, numeric, date-like or word-like values', () => {
+    const sc = new Scrubber();
+    for (const v of ['2026', 'alpine', 'unhealthy', 'running', '20261112', '2026-11-12', 'rolled_back', 'latest']) sc.add(v);
+    expect(sc.size).toBe(0);
+    const doc = '{"createdAt":"2026-11-12T01:00:00Z","image":"alpine:latest","health":"unhealthy"}';
+    expect(sc.scrub(doc)).toBe(doc);
+  });
+  it('still learns real credentials', () => {
+    const sc = new Scrubber();
+    sc.add('k_9876543210abc');
+    sc.add('correct-horse-battery-staple');
+    expect(sc.size).toBeGreaterThan(1);
+    expect(sc.scrub('x k_9876543210abc y')).not.toContain('k_9876543210abc');
   });
 });
