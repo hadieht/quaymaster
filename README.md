@@ -154,20 +154,64 @@ container, no external database.
 ## Quick start
 
 Requirements: Linux host, Docker Engine with the Compose plugin, and a directory that holds your Compose projects.
+Prebuilt multi-architecture images (`linux/amd64`, `linux/arm64`) are published to GitHub Container Registry:
+
+| Tag                                 | Meaning                                                              |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| `ghcr.io/hadieht/quaymaster:0.1.0`  | An exact release. **Recommended: pin one.**                          |
+| `ghcr.io/hadieht/quaymaster:latest` | The newest tagged release.                                           |
+| `ghcr.io/hadieht/quaymaster:edge`   | The latest commit on `main`. Development builds, not for production. |
+
+### Run the published image (Docker Compose)
 
 ```bash
-git clone https://github.com/hadieht/quaymaster.git
-cd quaymaster
+mkdir -p quaymaster/deploy && cd quaymaster
+BASE=https://raw.githubusercontent.com/hadieht/quaymaster/main
+curl -fsSLo deploy/docker-compose.yml $BASE/deploy/docker-compose.yml
+curl -fsSLo .env $BASE/.env.example && chmod 600 .env
 
-docker build -t quaymaster:dev .
-
-cp .env.example .env && chmod 600 .env
-docker run --rm quaymaster:dev node server/dist/cli.js gen-secret     # prints QM_SECRET_KEY=...; paste into .env
-# edit .env: set QM_SECRET_KEY, and QM_STACK_PATHS and DEPLOY_STACKS_DIR to the same directory (e.g. /opt/stacks)
+docker run --rm ghcr.io/hadieht/quaymaster:latest node server/dist/cli.js gen-secret     # prints QM_SECRET_KEY=...; paste into .env
+# edit .env: set QM_SECRET_KEY, QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory, e.g. /opt/stacks),
+# and pin DEPLOY_IMAGE=ghcr.io/hadieht/quaymaster:0.1.0
 
 DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
   docker compose --env-file .env -f deploy/docker-compose.yml up -d
 docker logs quaymaster 2>&1 | grep -i -B1 -A2 "setup"                 # one-time setup token
+```
+
+### Run the published image (plain `docker run`)
+
+```bash
+docker run --rm ghcr.io/hadieht/quaymaster:latest node server/dist/cli.js gen-secret > quaymaster.env && chmod 600 quaymaster.env
+
+docker run -d --name quaymaster --restart unless-stopped \
+  --user 10001:10001 --group-add "$(stat -c %g /var/run/docker.sock)" \
+  --read-only --tmpfs /tmp:size=64m,mode=1777 --cap-drop ALL --security-opt no-new-privileges:true \
+  --env-file quaymaster.env \
+  -e QM_HOST=0.0.0.0 -e QM_DATA_DIR=/data -e QM_SELF_CONTAINER=quaymaster -e QM_STACK_PATHS=/opt/stacks \
+  -p 127.0.0.1:8787:8787 \
+  -v quaymaster-data:/data -v /var/run/docker.sock:/var/run/docker.sock -v /opt/stacks:/opt/stacks \
+  ghcr.io/hadieht/quaymaster:0.1.0
+docker logs quaymaster 2>&1 | grep -i -B1 -A2 "setup"                 # one-time setup token
+```
+
+Add `-e QM_READ_ONLY=true` (and mount the stacks directory with `:ro`) to try Quaymaster in monitoring-only mode first.
+The Docker socket is root-equivalent; see the [security model](#security-model) and the
+[socket-proxy example](#read-only-mode-with-a-socket-proxy).
+
+### Build from source instead
+
+```bash
+git clone https://github.com/hadieht/quaymaster.git
+cd quaymaster
+docker build -t quaymaster:dev .
+
+cp .env.example .env && chmod 600 .env
+docker run --rm quaymaster:dev node server/dist/cli.js gen-secret     # prints QM_SECRET_KEY=...; paste into .env
+# edit .env: set QM_SECRET_KEY, QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory), and DEPLOY_IMAGE=quaymaster:dev
+
+DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
+  docker compose --env-file .env -f deploy/docker-compose.yml up -d
 ```
 
 Open `http://127.0.0.1:8787`, enter the setup token and create the admin account (password: at least 12 characters).
@@ -175,7 +219,7 @@ The port is bound to `127.0.0.1` by default. For access from other machines put 
 ([examples](#reverse-proxy-and-tls)).
 
 To skip the setup token, set `QM_ADMIN_USER` and `QM_ADMIN_PASSWORD_HASH` in `.env` before the first start. Generate
-the hash with `docker run --rm -it quaymaster:dev node server/dist/cli.js hash-password` and paste the line as printed
+the hash with `docker run --rm -it ghcr.io/hadieht/quaymaster:latest node server/dist/cli.js hash-password` and paste the line as printed
 (the single quotes matter: the hash contains `$`).
 
 Full instructions: [docs/INSTALL.md](docs/INSTALL.md).
@@ -333,7 +377,7 @@ credentials cannot be decrypted. Restoring requires Quaymaster to be stopped; se
 
 ## Upgrading
 
-Back up, build the new image, recreate the container. Schema migrations are forward-only and run automatically at
+Back up, pull the new image (or rebuild it), recreate the container. Schema migrations are forward-only and run automatically at
 start-up; the server refuses to start on a database written by a newer version. See
 [docs/OPERATIONS.md](docs/OPERATIONS.md#upgrading).
 

@@ -105,13 +105,13 @@ are monitor settings stored in the database (`GET/PUT /api/v1/monitors/settings`
 
 Read by `deploy/docker-compose.yml`, not by Quaymaster (Quaymaster would reject them if named `QM_*`):
 
-| Variable            | Default          | Purpose                                                                   |
-| ------------------- | ---------------- | ------------------------------------------------------------------------- |
-| `DOCKER_GID`        | none, required   | Group ID of the Docker socket: `stat -c %g /var/run/docker.sock`.         |
-| `DEPLOY_BIND`       | `127.0.0.1`      | Host address the port is published on.                                    |
-| `DEPLOY_PORT`       | `8787`           | Host port.                                                                |
-| `DEPLOY_STACKS_DIR` | `/opt/stacks`    | Stack directory mounted at the same path. Keep equal to `QM_STACK_PATHS`. |
-| `DEPLOY_IMAGE`      | `quaymaster:dev` | Image to run.                                                             |
+| Variable            | Default                             | Purpose                                                                   |
+| ------------------- | ----------------------------------- | ------------------------------------------------------------------------- |
+| `DOCKER_GID`        | none, required                      | Group ID of the Docker socket: `stat -c %g /var/run/docker.sock`.         |
+| `DEPLOY_BIND`       | `127.0.0.1`                         | Host address the port is published on.                                    |
+| `DEPLOY_PORT`       | `8787`                              | Host port.                                                                |
+| `DEPLOY_STACKS_DIR` | `/opt/stacks`                       | Stack directory mounted at the same path. Keep equal to `QM_STACK_PATHS`. |
+| `DEPLOY_IMAGE`      | `ghcr.io/hadieht/quaymaster:latest` | Image to run.                                                             |
 
 ## Settings stored in the database
 

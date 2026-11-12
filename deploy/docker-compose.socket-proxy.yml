@@ -24,7 +24,7 @@ services:
     tmpfs: [/run]
     security_opt: ['no-new-privileges:true']
   quaymaster:
-    image: ${DEPLOY_IMAGE:-quaymaster:dev}
+    image: ${DEPLOY_IMAGE:-ghcr.io/hadieht/quaymaster:latest}
     restart: unless-stopped
     user: '10001:10001'
     env_file: ../.env

@@ -3,6 +3,13 @@
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `publish` workflow: multi-architecture (amd64, arm64) images on GHCR; `:X.Y.Z`/`:latest` for version tags, `:edge` for `main`.
+- README and install docs for running the published image; compose files default to `ghcr.io/hadieht/quaymaster:latest`.
+
 ## [0.1.0] - 2026-11-12
 
 First release.

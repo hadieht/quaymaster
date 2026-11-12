@@ -88,7 +88,7 @@ start on a database written by a newer version.
 
 ```bash
 docker exec quaymaster node server/dist/cli.js backup /data/pre-upgrade.db     # 1. back up
-git pull && docker build -t quaymaster:dev .                                   # 2. new image
+docker compose --env-file .env -f deploy/docker-compose.yml pull  # 2. new image (or: git pull && docker build -t quaymaster:dev .)
 DOCKER_GID=... docker compose --env-file .env -f deploy/docker-compose.yml up -d  # 3. recreate (migrates on start)
 curl -fsS http://127.0.0.1:8787/healthz                                        # 4. verify
 ```

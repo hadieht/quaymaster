@@ -60,8 +60,8 @@ by a newer version is refused.
 
 ```bash
 docker exec quaymaster node server/dist/cli.js backup /data/pre-upgrade-$(date +%F).db     # 1. back up
-git pull                                                                                    # 2. new code
-docker build -t quaymaster:dev .                                                            # 3. new image
+# 2-3. new image: edit DEPLOY_IMAGE in .env to the new version tag, then pull it
+docker compose --env-file .env -f deploy/docker-compose.yml pull   # (or: git pull && docker build -t quaymaster:dev .)
 DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
   docker compose --env-file .env -f deploy/docker-compose.yml up -d                         # 4. recreate; migrates on start
 curl -fsS http://127.0.0.1:8787/healthz                                                     # 5. verify

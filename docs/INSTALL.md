@@ -14,7 +14,18 @@ Quaymaster needs access to the Docker socket, which is root-equivalent on the ho
 | Extra | nothing (the image ships the Docker CLI and the Compose plugin) | Node.js 22+, `docker` CLI with `docker compose`, `python3`, `make`, `g++` (to build the SQLite module) |
 | Disk  | a few hundred MB for the image, plus a small data volume        | similar                                                                                                |
 
-## 1. Get the code and build the image
+## 1. Get the image
+
+Use the published image (recommended) or build it yourself.
+
+```bash
+docker pull ghcr.io/hadieht/quaymaster:0.1.0      # pin an exact release; :latest = newest release, :edge = main (development)
+```
+
+To run it you also need `deploy/docker-compose.yml` and `.env.example` from this repository (download them, or clone).
+The commands below use `quaymaster:dev`; substitute `ghcr.io/hadieht/quaymaster:0.1.0` (and set `DEPLOY_IMAGE` accordingly) if you pulled.
+
+### Or build from source
 
 ```bash
 git clone https://github.com/hadieht/quaymaster.git
@@ -23,8 +34,8 @@ docker build -t quaymaster:dev .
 ```
 
 The image is multi-stage, runs as uid/gid 10001, and contains the Docker CLI and Compose plugin (Compose actions
-run inside the container against the mounted socket). No image is published by this repository; build it yourself or
-set `DEPLOY_IMAGE` to your own registry tag.
+run inside the container against the mounted socket). Images are published to GHCR by the `publish` workflow (releases and `main`);
+you can still build it yourself and set `DEPLOY_IMAGE` to your own tag.
 
 ## 2. Create the configuration
 
