@@ -126,3 +126,13 @@ describe('C-02 path traversal into the Engine API', () => {
     expect(isSafeRef('-h', 'image')).toBe(false);
   });
 });
+
+describe('H-02 pull respects QM_MANAGED_SCOPE', () => {
+  it('refuses a reference no in-scope container uses (and creates nothing)', async () => {
+    const res = await t.call('POST', '/api/v1/images/pull', { ref: 'qm-audit-notused/never:1' }, t.admin);
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe('out_of_scope');
+    const ops = await t.call('GET', '/api/v1/operations', undefined, t.admin);
+    expect(JSON.stringify(ops.body)).not.toContain('qm-audit-notused');
+  });
+});
