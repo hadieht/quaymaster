@@ -352,6 +352,7 @@ export class ComposeService implements Recreator {
     req: ComposeActionRequest,
     actor: Actor,
   ): Promise<{ operationId: string }> {
+    this.d.guard.assertNotUnderMaintenance(name, null);
     const service = req.service;
     if (service !== undefined && !SERVICE_NAME_RE.test(service)) throw badRequest('Invalid service name');
     const base = {

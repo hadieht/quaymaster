@@ -270,6 +270,7 @@ export class ContainerService {
       const c = await this.resolve(ref);
       // identity is now known: record the real target, not what the caller typed
       base.target = `${c.name} (${c.id.slice(0, 12)})`;
+      if (actor !== SYSTEM_ACTOR) this.d.guard.assertNotUnderMaintenance(c.project, c.name);
       this.d.guard.assertContainer({ id: c.id, name: c.name, project: c.project }, action);
 
       if ((action === 'remove' || action === 'recreate') && req.confirm !== c.name) {

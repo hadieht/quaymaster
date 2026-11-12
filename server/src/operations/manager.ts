@@ -46,6 +46,10 @@ export class OperationManager {
     return this.repo.markInterrupted();
   }
 
+  isLocked(key: string): boolean {
+    return this.locks.has(key);
+  }
+
   busy(): boolean {
     return this.locks.size > 0;
   }

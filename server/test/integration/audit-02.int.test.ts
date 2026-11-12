@@ -136,3 +136,30 @@ describe('H-02 pull respects QM_MANAGED_SCOPE', () => {
     expect(JSON.stringify(ops.body)).not.toContain('qm-audit-notused');
   });
 });
+
+describe('H-03 manual actions are refused while a maintenance run holds the lock', () => {
+  it('compose and container actions return 409 until the run finishes', async () => {
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((r) => (release = r));
+    t.ctx.ops.start({
+      kind: 'maintenance.update',
+      target: 'qmtest-h03',
+      actor: 'test',
+      params: {},
+      lockKey: 'maintenance',
+      run: async () => {
+        await held;
+      },
+    });
+    try {
+      const c = await t.call('POST', '/api/v1/compose/projects/qmtest-h03/actions/restart', {}, t.admin);
+      expect(c.status).toBe(409);
+      expect(JSON.stringify(c.body)).toContain('maintenance run is active');
+    } finally {
+      release();
+    }
+    await new Promise((r) => setTimeout(r, 200));
+    const after = await t.call('POST', '/api/v1/compose/projects/qmtest-h03/actions/restart', {}, t.admin);
+    expect(JSON.stringify(after.body)).not.toContain('maintenance run is active');
+  });
+});

@@ -74,6 +74,18 @@ export class Guard {
     this.self = opts.self ?? NO_SELF;
   }
 
+  private maintenanceGate: ((project: string | null, name: string | null) => string | null) | null = null;
+
+  /** Wires the check that refuses manual actions on a project while a maintenance run owns it (audit H-03). */
+  setMaintenanceGate(fn: (project: string | null, name: string | null) => string | null): void {
+    this.maintenanceGate = fn;
+  }
+
+  assertNotUnderMaintenance(project: string | null, name: string | null): void {
+    const why = this.maintenanceGate?.(project, name);
+    if (why) throw new AppError(409, 'conflict', why);
+  }
+
   setSelf(self: SelfInfo): void {
     this.self = self;
   }

@@ -263,6 +263,13 @@ async function build(
     log,
     now: () => clock.now(),
   });
+  // H-03: manual actions are refused on a project while a maintenance run holds the single-run lock
+  guard.setMaintenanceGate((project, name) => {
+    if (!ops.isLocked('maintenance')) return null;
+    const run = runsRepo.running();
+    if (run && project !== run.target && name !== run.target && /^[a-z0-9][a-z0-9_-]*$/.test(run.target)) return null;
+    return 'A maintenance run is active on this project; manual actions are refused until it finishes';
+  });
   const windowsRepo = new WindowsRepo(db);
   const executor = new RunExecutor({
     compose,
