@@ -1,7 +1,21 @@
 import Database from 'better-sqlite3';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, writeSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  statSync,
+  unlinkSync,
+  utimesSync,
+  writeSync,
+} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { runMigrations } from './migrate.js';
+
+const LOCK_HEARTBEAT_MS = 5_000;
+const LOCK_STALE_MS = 20_000;
 
 export type Db = Database.Database;
 
@@ -61,14 +75,23 @@ export function acquireInstanceLock(dataDir: string): () => void {
   };
   let fd = tryCreate();
   if (fd === null) {
-    const holder = Number.parseInt(readFileSync(lock, 'utf8').split('\n')[0] ?? '', 10);
+    const lines = readFileSync(lock, 'utf8').split('\n');
+    const holder = Number.parseInt(lines[0] ?? '', 10);
+    const sameHost = (lines[2] ?? '') === os.hostname();
+    // A live holder refreshes the lock's mtime every LOCK_HEARTBEAT_MS. In containers pids are not
+    // meaningful across restarts (a SIGKILLed container leaves its pid file, and the next one may
+    // even get the same pid), so a different host name, or a stale mtime, means "not alive".
+    const fresh = Date.now() - statSync(lock).mtimeMs < LOCK_STALE_MS;
     let alive = false;
-    if (Number.isInteger(holder) && holder > 0 && holder !== process.pid) {
-      try {
-        process.kill(holder, 0);
-        alive = true;
-      } catch (e) {
-        alive = (e as NodeJS.ErrnoException).code === 'EPERM';
+    if (fresh && Number.isInteger(holder) && holder > 0 && holder !== process.pid) {
+      if (!sameHost) alive = true;
+      else {
+        try {
+          process.kill(holder, 0);
+          alive = true;
+        } catch (e) {
+          alive = (e as NodeJS.ErrnoException).code === 'EPERM';
+        }
       }
     }
     if (alive) {
@@ -78,12 +101,22 @@ export function acquireInstanceLock(dataDir: string): () => void {
     fd = tryCreate();
     if (fd === null) throw new Error(`Could not acquire ${lock}`);
   }
-  writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+  writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n${os.hostname()}\n`);
   closeSync(fd);
+  const beat = setInterval(() => {
+    try {
+      const now = new Date();
+      utimesSync(lock, now, now);
+    } catch {
+      /* lock removed: nothing to refresh */
+    }
+  }, LOCK_HEARTBEAT_MS);
+  beat.unref();
   let released = false;
   return () => {
     if (released) return;
     released = true;
+    clearInterval(beat);
     if (existsSync(lock)) unlinkSync(lock);
   };
 }

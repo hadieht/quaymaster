@@ -22,27 +22,27 @@ services:
     networks: [backend]
     read_only: true
     tmpfs: [/run]
-    security_opt: ["no-new-privileges:true"]
+    security_opt: ['no-new-privileges:true']
   quaymaster:
     image: ${DEPLOY_IMAGE:-quaymaster:dev}
     restart: unless-stopped
-    user: "10001:10001"
+    user: '10001:10001'
     env_file: ../.env
     environment:
       QM_HOST: 0.0.0.0
       QM_DATA_DIR: /data
       QM_DOCKER_SOCKET: tcp://socket-proxy:2375
-      QM_READ_ONLY: "true"
+      QM_READ_ONLY: 'true'
       QM_PROTECTED: socket-proxy
     depends_on: [socket-proxy]
     ports:
-      - "${DEPLOY_BIND:-127.0.0.1}:${DEPLOY_PORT:-8787}:8787"
+      - '${DEPLOY_BIND:-127.0.0.1}:${DEPLOY_PORT:-8787}:8787'
     volumes:
       - quaymaster-data:/data
     networks: [backend, default]
     read_only: true
-    tmpfs: ["/tmp:size=64m,mode=1777"]
-    security_opt: ["no-new-privileges:true"]
+    tmpfs: ['/tmp:size=64m,mode=1777']
+    security_opt: ['no-new-privileges:true']
     cap_drop: [ALL]
     mem_limit: 512m
     cpus: 1.0

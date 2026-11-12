@@ -8,9 +8,9 @@ services:
     image: ${DEPLOY_IMAGE:-quaymaster:dev}
     container_name: quaymaster
     restart: unless-stopped
-    user: "10001:10001"
+    user: '10001:10001'
     # Socket access without root: join the host's docker group at run time (the image never hard-codes a GID).
-    group_add: ["${DOCKER_GID:?set DOCKER_GID to the group id of /var/run/docker.sock}"]
+    group_add: ['${DOCKER_GID:?set DOCKER_GID to the group id of /var/run/docker.sock}']
     env_file: ../.env
     environment:
       QM_HOST: 0.0.0.0 # inside the container; exposure is controlled by the port mapping below
@@ -18,7 +18,7 @@ services:
       QM_DOCKER_SOCKET: /var/run/docker.sock
       QM_SELF_CONTAINER: quaymaster # self-protection; also auto-detected from /proc/self/mountinfo
     ports:
-      - "${DEPLOY_BIND:-127.0.0.1}:${DEPLOY_PORT:-8787}:8787"
+      - '${DEPLOY_BIND:-127.0.0.1}:${DEPLOY_PORT:-8787}:8787'
     volumes:
       - quaymaster-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
@@ -37,13 +37,13 @@ services:
     cpus: 1.0
     pids_limit: 256
     labels:
-      quaymaster.role: "self" # informational marker
+      quaymaster.role: 'self' # informational marker
     healthcheck:
       test:
         [
-          "CMD",
-          "node",
-          "-e",
+          'CMD',
+          'node',
+          '-e',
           "fetch('http://127.0.0.1:8787/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 30s
