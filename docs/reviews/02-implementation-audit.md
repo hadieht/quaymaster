@@ -365,7 +365,7 @@ Suggested command: `docker rmi nginx:latest quaymaster-staged/7e59ad64326b:165dd
 | M-03 | partial  | SSE null guard fixed; destroying the socket on stream error not done (low impact, see DECISIONS) |
 | M-04 | fixed    | cc84564 — password-change throttle |
 | M-05 | deferred | limiter state is in memory; persistence needs a design decision (DECISIONS.md) |
-| M-06 | pending  | owner approved the history rewrite; executed last, see the task hand-off |
+| M-06 | fixed   | history rewritten with git filter-repo (owner-approved); 2 real container names replaced, 0 hits afterwards; backup bundle kept outside the repo |
 | L-04 | fixed    | cc84564 |
 | L-01, L-02, L-03, L-05, L-06 | deferred | dependency bumps (zod/react-router/uuid) and cosmetic items; DECISIONS.md |
 

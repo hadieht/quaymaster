@@ -115,3 +115,8 @@ NOTE items RT-31 (version negotiation), RT-33 (Compose versions shown per projec
 - **Test environment:** the containerised verification ran with `--network host` (the fixture registry listens on host 127.0.0.1) and fixtures copied to a neutral path outside `/root` (mode 700, not traversable by the non-root user). Production uses the bridge network as in `deploy/`.
 - **Playwright:** `@playwright/test` 1.64 is a root devDependency; `E2E_CHROMIUM` can point to an installed Chromium.
 - **Deferred:** M-05 (persist rate-limiter state), M-03 socket destroy, L-01 (npm audit: zod, react-router, uuid bumps), L-02, L-03, L-05, L-06.
+
+## Phase 5: history rewrite and test flakiness note
+
+- **M-06 history rewrite.** The owner approved rewriting history to drop two real container names from earlier review text. Done with `git filter-repo --replace-text` after a `git bundle` backup outside the repo; all commit hashes changed. RFC1918 literals in unit tests and the fake credentials in redaction tests are deliberate fixtures (gitleaks reports 8 findings, all in those files).
+- **Timing-sensitive test.** `maintenance.int.test.ts` "critical target is never auto-updated" failed once when the full suite ran alongside a typecheck/lint on the 2-core host (2 runs instead of 1) and passed in isolation and when the file was re-run. Treat as load-sensitive; do not run other jobs during the suite.
