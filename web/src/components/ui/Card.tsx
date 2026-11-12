@@ -52,24 +52,12 @@ export function StatCard({
   const c = tone ? TONE_CLASSES[tone] : null;
   return (
     <Card className="p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-xs font-medium uppercase tracking-wide text-muted">{label}</div>
-          <div className={cn('mt-1 text-2xl font-semibold tabular-nums', c?.text)}>{value}</div>
-          {sub ? <div className="mt-0.5 text-xs text-muted">{sub}</div> : null}
-        </div>
-        {icon ? (
-          <div
-            className={cn(
-              'flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
-              c ? c.bg : 'bg-surface-2',
-              c?.text ?? 'text-muted',
-            )}
-          >
-            <Icon name={icon} className="h-5 w-5" />
-          </div>
-        ) : null}
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted">
+        {icon ? <Icon name={icon} className={cn('h-4 w-4 shrink-0', c?.text)} /> : null}
+        <span className="min-w-0 truncate">{label}</span>
       </div>
+      <div className={cn('mt-1 whitespace-nowrap text-2xl font-semibold tabular-nums', c?.text)}>{value}</div>
+      {sub ? <div className="mt-0.5 text-xs text-muted">{sub}</div> : null}
     </Card>
   );
 }
