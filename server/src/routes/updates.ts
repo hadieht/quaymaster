@@ -3,8 +3,7 @@ import { z } from 'zod';
 import type { CleanupCategory } from '@quaymaster/shared';
 import { actorOf, parseBody, requirePerm } from '../app.js';
 import type { AppContext } from '../context.js';
-import { cacheKey, engineName, formatRef, parseImageRef } from '../registry/reference.js';
-import { AppError, badRequest, notFound } from '../util/errors.js';
+import { notFound } from '../util/errors.js';
 import { startStandalonePull } from '../updates/pull.js';
 
 const refBody = z.object({ ref: z.string().min(1).max(400) }).strict();
