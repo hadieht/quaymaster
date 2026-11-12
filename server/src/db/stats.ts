@@ -48,7 +48,7 @@ export class StatsRepo {
   prune(olderThanMinute: number, batch = 5000): number {
     return this.db
       .prepare(
-        'DELETE FROM stats_rollups WHERE rowid IN (SELECT rowid FROM stats_rollups WHERE minute < ? LIMIT ?)',
+        'DELETE FROM stats_rollups WHERE (container_id, minute) IN (SELECT container_id, minute FROM stats_rollups WHERE minute < ? LIMIT ?)',
       )
       .run(olderThanMinute, batch).changes;
   }
