@@ -179,8 +179,8 @@ mv .env.new .env && chmod 600 .env
 # edit .env: set QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory, e.g. /opt/stacks),
 # and pin DEPLOY_IMAGE=ghcr.io/hadieht/quaymaster:0.1.0
 
-DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
-  docker compose --env-file .env -f deploy/docker-compose.yml up -d
+sed -i "s/^DOCKER_GID=.*/DOCKER_GID=$(stat -c %g /var/run/docker.sock)/" .env   # the compose file needs it on every command
+docker compose up -d                                                  # COMPOSE_FILE / COMPOSE_ENV_FILES in .env point at deploy/
 docker logs quaymaster 2>&1 | grep -i -B1 -A2 "setup"                 # one-time setup token
 ```
 
@@ -217,8 +217,8 @@ docker run --rm quaymaster:dev node server/dist/cli.js gen-secret >> .env.new
 mv .env.new .env && chmod 600 .env
 # edit .env: set QM_STACK_PATHS and DEPLOY_STACKS_DIR (the same directory), and DEPLOY_IMAGE=quaymaster:dev
 
-DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
-  docker compose --env-file .env -f deploy/docker-compose.yml up -d
+sed -i "s/^DOCKER_GID=.*/DOCKER_GID=$(stat -c %g /var/run/docker.sock)/" .env   # the compose file needs it on every command
+docker compose up -d                                                  # COMPOSE_FILE / COMPOSE_ENV_FILES in .env point at deploy/
 ```
 
 Open `http://127.0.0.1:8787`, enter the setup token and create the admin account (password: at least 12 characters).
@@ -405,6 +405,8 @@ container is created).
 browser's address bar, including scheme and port.
 
 **Login returns 429 for everyone.** You are behind a proxy without `QM_TRUST_PROXY`. Set it to the proxy's address.
+
+**`required variable DOCKER_GID is missing a value`.** Set `DOCKER_GID` in `.env` (`sed -i "s/^DOCKER_GID=.*/DOCKER_GID=$(stat -c %g /var/run/docker.sock)/" .env`) and run `docker compose` from the folder that holds `.env`; it also needs `COMPOSE_FILE` and `COMPOSE_ENV_FILES` from `.env.example`.
 
 **"Permission denied" on the Docker socket.** `DOCKER_GID` is wrong. Use `stat -c %g /var/run/docker.sock`.
 

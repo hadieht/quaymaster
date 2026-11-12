@@ -78,8 +78,8 @@ Edit `.env`:
 ## 3. Start (container mode)
 
 ```bash
-DOCKER_GID=$(stat -c %g /var/run/docker.sock) \
-  docker compose --env-file .env -f deploy/docker-compose.yml up -d
+sed -i "s/^DOCKER_GID=.*/DOCKER_GID=$(stat -c %g /var/run/docker.sock)/" .env   # the compose file needs it on every command
+docker compose up -d                                                  # COMPOSE_FILE / COMPOSE_ENV_FILES in .env point at deploy/
 docker ps --filter name=quaymaster          # wait for "healthy"
 docker logs quaymaster 2>&1 | grep -i -A2 "setup token"
 ```
@@ -89,7 +89,9 @@ Open `http://127.0.0.1:8787`.
 What the compose file sets up:
 
 - **User and socket.** Runs as `10001:10001`; `group_add` gives it the host's Docker group, so it needs `DOCKER_GID`.
-  The compose file fails with a clear message if `DOCKER_GID` is unset.
+  The compose file fails with a clear message if `DOCKER_GID` is unset, on **every** compose command (`restart`, `logs`,
+  `pull`, ...), so it is stored in `.env`. `.env` also sets `COMPOSE_FILE` and `COMPOSE_ENV_FILES`, which is why a plain
+  `docker compose restart` works from the folder that holds `.env`.
 - **Volumes.** `quaymaster-data` at `/data`; the socket; your stack directory at its identical host path.
 - **Hardening.** Read-only root filesystem (only `/data` and a 64 MB `/tmp` tmpfs are writable), `no-new-privileges`,
   all capabilities dropped, 512 MB memory, 1 CPU, 256 pids, `tini` as PID 1, healthcheck on `/healthz`.
