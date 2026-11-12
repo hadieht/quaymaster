@@ -246,3 +246,26 @@ describe('M-02 refused start-now leaves no orphan run', () => {
     }
   });
 });
+
+describe('QM_VISIBLE_SCOPE hides everything outside the pattern', () => {
+  it('lists, compose discovery and lookups only know visible names', async () => {
+    const v = await startApp({ QM_VISIBLE_SCOPE: 'qmtest-visible-only-*' });
+    try {
+      const list = async (p: string) => (await v.call('GET', `/api/v1/${p}`, undefined, v.admin)).body;
+      const asArray = (b: unknown): unknown[] =>
+        Array.isArray(b) ? b : ((Object.values(b as object).find(Array.isArray) as unknown[]) ?? []);
+      for (const p of ['containers', 'compose/projects', 'volumes', 'networks']) {
+        expect(asArray(await list(p)), p).toEqual([]);
+      }
+      // a real, existing container reference is a 404 when hidden
+      const plain = await t.call('GET', '/api/v1/containers', undefined, t.admin);
+      const first = asArray(plain.body)[0] as { name?: string } | undefined;
+      if (first?.name) {
+        const hidden = await v.call('GET', `/api/v1/containers/${first.name}`, undefined, v.admin);
+        expect(hidden.status).toBe(404);
+      }
+    } finally {
+      await v.close();
+    }
+  });
+});

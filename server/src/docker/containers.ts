@@ -66,6 +66,10 @@ export class ContainerService {
     },
   ) {}
 
+  get guard(): Guard {
+    return this.d.guard;
+  }
+
   setRecreator(r: Recreator): void {
     this.recreator = r;
   }
@@ -81,7 +85,13 @@ export class ContainerService {
     if (this.inflight) return this.inflight;
     this.inflight = this.d.docker
       .listContainers({ all: true })
-      .then((v) => {
+      .then((all) => {
+        const g = this.d.guard;
+        const v = g.visibilityRestricted
+          ? all.filter((c) =>
+              g.containerVisible(c.Names?.[0] ?? c.Id, c.Labels?.['com.docker.compose.project'] ?? null),
+            )
+          : all;
         this.cache = { at: Date.now(), value: v };
         return v;
       })
@@ -146,8 +156,9 @@ export class ContainerService {
       const m = mapDockerError(e);
       throw m.code === 'not_found' ? notFound('Container') : m;
     }
-    learnSecrets(raw.Config, this.d.config.redactAllEnv);
     const labels = raw.Config?.Labels ?? {};
+    if (!this.d.guard.containerVisible(raw.Name, labels[LABEL.project] ?? null)) throw notFound('Container');
+    learnSecrets(raw.Config, this.d.config.redactAllEnv);
     return {
       id: raw.Id,
       name: raw.Name.replace(/^\//, ''),

@@ -52,6 +52,7 @@ export interface ProjectRefs {
 export interface GuardOptions {
   readOnly: boolean;
   scope: string[];
+  visibleScope?: string[];
   protectedNames: string[];
   self?: SelfInfo;
 }
@@ -66,11 +67,13 @@ export interface GuardOptions {
 export class Guard {
   private scopeRes: RegExp[];
   private protectedRes: RegExp[];
+  private visibleRes: RegExp[];
   private self: SelfInfo;
 
   constructor(private readonly opts: GuardOptions) {
     this.scopeRes = opts.scope.map(globToRegExp);
     this.protectedRes = opts.protectedNames.map(globToRegExp);
+    this.visibleRes = (opts.visibleScope ?? []).map(globToRegExp);
     this.self = opts.self ?? NO_SELF;
   }
 
@@ -105,6 +108,17 @@ export class Guard {
   }
   get readOnly(): boolean {
     return this.readOnlyReason !== null;
+  }
+
+  /** QM_VISIBLE_SCOPE: resources outside it do not exist as far as the UI and API are concerned. */
+  get visibilityRestricted(): boolean {
+    return this.visibleRes.length > 0;
+  }
+  visible(name: string): boolean {
+    return this.visibleRes.length === 0 || this.visibleRes.some((r) => r.test(name.replace(/^\//, '')));
+  }
+  containerVisible(name: string, project: string | null): boolean {
+    return this.visible(name) && (project === null || this.visible(project));
   }
 
   inScope(name: string): boolean {

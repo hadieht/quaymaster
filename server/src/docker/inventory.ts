@@ -29,7 +29,15 @@ export class ImageService {
       }),
       this.d.containers.listRaw(),
     ]);
-    return images.map((img) => {
+    const g = this.d.containers.guard;
+    const shown = !g.visibilityRestricted
+      ? images
+      : images.filter(
+          (img) =>
+            containers.some((c) => c.ImageID === img.Id) ||
+            (img.RepoTags ?? []).some((t) => g.visible((t.split(':')[0] ?? t).split('/').pop() ?? t)),
+        );
+    return shown.map((img) => {
       const users = containers.filter((c) => c.ImageID === img.Id);
       const tags = (img.RepoTags ?? []).filter((t) => t !== '<none>:<none>');
       return {
@@ -77,7 +85,14 @@ export class VolumeService {
       this.d.containers.listRaw(),
     ]);
     const sizes = this.d.usage.cached()?.volumes ?? {};
-    return (res.Volumes ?? []).map((v) => {
+    const g = this.d.containers.guard;
+    const vols = (res.Volumes ?? []).filter(
+      (v) =>
+        g.visible(v.Name) ||
+        ((v.Labels as Record<string, string> | null)?.[LABEL.project] !== undefined &&
+          g.visible((v.Labels as Record<string, string>)[LABEL.project] as string)),
+    );
+    return vols.map((v) => {
       const users = containers
         .filter((c) => (c.Mounts ?? []).some((m) => m.Type === 'volume' && m.Name === v.Name))
         .map((c) => (c.Names?.[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''));
@@ -116,7 +131,13 @@ export class NetworkService {
       }),
       this.d.containers.listRaw(),
     ]);
-    return nets.map((n) => {
+    const g = this.d.containers.guard;
+    const shownNets = nets.filter(
+      (n) =>
+        g.visible(n.Name) ||
+        (n.Labels?.[LABEL.project] !== undefined && g.visible(n.Labels[LABEL.project] as string)),
+    );
+    return shownNets.map((n) => {
       const labels = (n.Labels ?? {}) as Record<string, string>;
       const members = containers
         .filter((c) => {

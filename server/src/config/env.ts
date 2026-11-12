@@ -39,6 +39,7 @@ const schema = z.object({
   QM_TRUST_PROXY: list.default(''),
   QM_READ_ONLY: bool.default('false'),
   QM_MANAGED_SCOPE: list.default(''),
+  QM_VISIBLE_SCOPE: list.default(''),
   QM_PROTECTED: list.default(''),
   QM_SELF_CONTAINER: z.string().optional(),
   QM_STACK_PATHS: list.default(''),
@@ -79,6 +80,8 @@ export interface Config {
   trustProxy: string[];
   readOnly: boolean;
   managedScope: string[];
+  /** Glob allow-list of resource names that are VISIBLE at all (demo/screenshots); empty = everything. */
+  visibleScope: string[];
   protectedNames: string[];
   selfContainer: string | null;
   stackPaths: string[];
@@ -220,6 +223,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trustProxy: e.QM_TRUST_PROXY,
     readOnly: e.QM_READ_ONLY,
     managedScope: e.QM_MANAGED_SCOPE,
+    visibleScope: e.QM_VISIBLE_SCOPE,
     protectedNames: e.QM_PROTECTED,
     selfContainer: e.QM_SELF_CONTAINER ?? null,
     stackPaths: e.QM_STACK_PATHS.map((p) => path.resolve(p)),

@@ -251,7 +251,8 @@ export class EventWatcher extends EventEmitter {
     this.recent.add(key);
     if (this.recent.size > 2000) this.recent.delete(this.recent.values().next().value as string);
     const ev = sanitizeEvent(raw);
-    if (ev) this.enqueue(ev);
+    const g = this.d.containers.guard;
+    if (ev && (!g.visibilityRestricted || (ev.name ? g.visible(ev.name) : false))) this.enqueue(ev);
   }
 
   private enqueue(e: NewEvent): void {

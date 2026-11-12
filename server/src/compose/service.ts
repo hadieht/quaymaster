@@ -87,7 +87,13 @@ export class ComposeService implements Recreator {
     if (!fresh && this.cache && Date.now() - this.cache.at < DISCOVERY_CACHE_MS) return this.cache.value;
     const [containers, ls] = await Promise.all([this.d.containers.listRaw(fresh), this.d.runner.ls()]);
     const scanned = scanStackPaths(this.d.config.stackPaths);
-    const value = buildProjects({ containers, ls, scanned, policy: this.d.policy, guard: this.d.guard });
+    const value = buildProjects({
+      containers,
+      ls,
+      scanned,
+      policy: this.d.policy,
+      guard: this.d.guard,
+    }).filter((p) => this.d.guard.visible(p.name));
     this.cache = { at: Date.now(), value, scanned };
     return value;
   }

@@ -152,6 +152,7 @@ async function build(
   const guard = new Guard({
     readOnly: config.readOnly,
     scope: config.managedScope,
+    visibleScope: config.visibleScope,
     protectedNames: config.protectedNames,
   });
   const handle = await connectDocker(config, guard);
@@ -267,7 +268,8 @@ async function build(
   guard.setMaintenanceGate((project, name) => {
     if (!ops.isLocked('maintenance')) return null;
     const run = runsRepo.running();
-    if (run && project !== run.target && name !== run.target && /^[a-z0-9][a-z0-9_-]*$/.test(run.target)) return null;
+    if (run && project !== run.target && name !== run.target && /^[a-z0-9][a-z0-9_-]*$/.test(run.target))
+      return null;
     return 'A maintenance run is active on this project; manual actions are refused until it finishes';
   });
   const windowsRepo = new WindowsRepo(db);
