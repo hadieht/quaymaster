@@ -155,11 +155,19 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
     }
   });
 
-  app.addHook('onSend', async (_req, reply, payload) => {
+  app.addHook('onSend', async (req, reply, payload) => {
     // Known-value scrubbing (RT-04): any literal secret learned from containers/projects is removed
     // from every JSON response, even where it sits in free text (e.g. a command string).
+    // Account endpoints never carry container data; scrubbing them would turn a short learned value
+    // such as "admin" into a masked username/role and break the UI (see docs/DECISIONS.md).
     const type = String(reply.getHeader('content-type') ?? '');
-    if (typeof payload === 'string' && type.includes('application/json') && globalScrubber.size > 0) {
+    const accountPath = /^\/api\/v1\/(auth|users)(\/|\?|$)/.test(req.url);
+    if (
+      !accountPath &&
+      typeof payload === 'string' &&
+      type.includes('application/json') &&
+      globalScrubber.size > 0
+    ) {
       return globalScrubber.scrub(payload);
     }
     return payload;

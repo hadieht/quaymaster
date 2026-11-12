@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { globalScrubber } from '../../src/redaction/redact.js';
 import { ADMIN, startApp, type TestApp } from '../helpers/app.js';
 
 /** Phase 3 additions: settings overview, own sessions, cron preview, stats overview, static UI serving. */
@@ -145,5 +146,14 @@ describe('web UI support (no containers needed)', () => {
     expect(at(nowMin - 2)?.netRx).toBeCloseTo(102, 5);
     expect(at(nowMin - 2)?.netTx).toBeCloseTo(10 + 1, 5);
     expect(at(nowMin - 1)?.netRx).toBe(0);
+  });
+
+  it('does not mask the username/role in account endpoints when a short value like "admin" was learned as a secret', async () => {
+    globalScrubber.add('admin'); // e.g. a container whose PASSWORD is "admin"
+    const me = await t.call('GET', '/api/v1/auth/me', undefined, t.admin);
+    expect(me.body.user.role).toBe('admin');
+    expect(me.body.user.username).toBe(ADMIN.username);
+    const users = await t.call('GET', '/api/v1/users', undefined, t.admin);
+    expect(JSON.stringify(users.body)).not.toContain('••••••');
   });
 });
