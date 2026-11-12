@@ -24,10 +24,10 @@ docker compose -f deploy/docker-compose.yml up -d   # http://127.0.0.1:8790
 
 ## Screenshots (demo data only)
 
-| | |
-|---|---|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Containers](docs/screenshots/containers.png) |
-| ![Container detail](docs/screenshots/container-detail.png) | ![Logs](docs/screenshots/container-logs.png) |
-| ![Compose project](docs/screenshots/compose-project.png) | ![Maintenance plan](docs/screenshots/maintenance-plan.png) |
-| ![Approval](docs/screenshots/maintenance-approval.png) | ![Run history](docs/screenshots/run-history.png) |
-| ![Settings](docs/screenshots/settings.png) | ![Mobile](docs/screenshots/mobile-containers.png) |
+|                                                            |                                                            |
+| ---------------------------------------------------------- | ---------------------------------------------------------- |
+| ![Dashboard](docs/screenshots/dashboard.png)               | ![Containers](docs/screenshots/containers.png)             |
+| ![Container detail](docs/screenshots/container-detail.png) | ![Logs](docs/screenshots/container-logs.png)               |
+| ![Compose project](docs/screenshots/compose-project.png)   | ![Maintenance plan](docs/screenshots/maintenance-plan.png) |
+| ![Approval](docs/screenshots/maintenance-approval.png)     | ![Run history](docs/screenshots/run-history.png)           |
+| ![Settings](docs/screenshots/settings.png)                 | ![Mobile](docs/screenshots/mobile-containers.png)          |
