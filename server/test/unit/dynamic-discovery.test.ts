@@ -575,7 +575,7 @@ describe('discovery red-team regressions (docs/reviews/04-discovery-redteam.md)'
 
   it('RT4-01: the helper never runs as root, whatever the image says', () => {
     expect(helperUser(0, 0)).toBe('65534:65534');
-    expect(helperUser(undefined, undefined)).toBe('65534:65534');
+    expect(helperUser(null, null)).toBe('65534:65534'); // unknown user (e.g. no getuid)
     expect(helperUser(10001, 10001)).toBe('10001:10001');
   });
 

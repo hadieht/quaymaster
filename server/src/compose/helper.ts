@@ -184,10 +184,10 @@ const STATUS_CACHE_MS = 15_000;
  * set as QM_HELPER_IMAGE must not read root-only files such as credentials).
  */
 export function helperUser(
-  uid: number | undefined = process.getuid?.(),
-  gid: number | undefined = process.getgid?.(),
+  uid: number | null | undefined = process.getuid?.(),
+  gid: number | null | undefined = process.getgid?.(),
 ): string {
-  if (uid === undefined || gid === undefined || uid === 0) return '65534:65534';
+  if (uid == null || gid == null || uid === 0) return '65534:65534';
   return `${uid}:${gid}`;
 }
 
