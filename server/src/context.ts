@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type Dockerode from 'dockerode';
@@ -7,6 +7,8 @@ import { LoginLimiter } from './auth/limiter.js';
 import { AuthService } from './auth/service.js';
 import { SetupService } from './auth/setup.js';
 import { ComposeRunner } from './compose/runner.js';
+import { FileHelper } from './compose/helper.js';
+import { IgnoreService } from './compose/ignore-service.js';
 import { ComposeService } from './compose/service.js';
 import { PathPolicy } from './compose/paths.js';
 import type { Config } from './config/env.js';
@@ -15,6 +17,8 @@ import { SecretBox } from './crypto/secretbox.js';
 import { acquireInstanceLock, openDatabase, type Db } from './db/connection.js';
 import { AuditRepo } from './db/audit.js';
 import { EventsRepo } from './db/events.js';
+import { IgnoreRepo } from './db/ignore.js';
+import { IgnoreList } from './docker/ignore.js';
 import { OperationsRepo } from './db/operations.js';
 import { SessionsRepo } from './db/sessions.js';
 import { KvRepo, SecretStore, StatsRepo } from './db/stats.js';
@@ -83,6 +87,8 @@ export interface AppContext {
   runner: ComposeRunner;
   policy: PathPolicy;
   compose: ComposeService;
+  ignores: IgnoreService;
+  helper: FileHelper;
   clock: AdjustableClock;
   notifications: NotificationService;
   registry: RegistryClient;
@@ -187,20 +193,68 @@ async function build(
   const system = new SystemService({ docker, config });
   let dockerRoot: string | null = null;
   dockerRoot = await system.dockerRootDir();
-  const policy = new PathPolicy(config.stackPaths, () => dockerRoot);
+  // Directories the operator mounted into Quaymaster at the identical path are allowed stack roots too: that is
+  // administrator-controlled deployment config (it cannot be forged through labels).
+  const selfRaw = self.containerId
+    ? await docker
+        .getContainer(self.containerId)
+        .inspect()
+        .catch(() => null)
+    : null;
+  const mountRoots = config.stackAutoMounts ? selfMountRoots(selfRaw, config, dockerRoot) : [];
+  if (mountRoots.length > 0)
+    log.info({ mountRoots }, 'directories mounted at the same path are allowed stack roots');
+  const policy = new PathPolicy(
+    config.stackPaths,
+    () => dockerRoot,
+    () => mountRoots,
+  );
 
+  const ignoreRepo = new IgnoreRepo(db);
+  const ignoreList = new IgnoreList(ignoreRepo);
   const containers = new ContainerService({ docker, guard, audit, config });
+  containers.setIgnoreList(ignoreList);
+  const helper = new FileHelper({
+    docker,
+    guard,
+    config,
+    selfImage: async () => selfRaw?.Image ?? null,
+    log,
+    // RT4-01: never mount the Docker data root or Quaymaster's own data directory (host side) into a helper
+    deniedDirs: () => helperDeniedDirs(selfRaw, config, dockerRoot),
+  });
   const ops = new OperationManager(new OperationsRepo(db), log);
   const interrupted = ops.recover();
   if (interrupted > 0)
     log.warn({ interrupted }, 'operations left running by a previous crash were marked failed (interrupted)');
   const runner = new ComposeRunner({ config, guard });
-  const compose = new ComposeService({ runner, policy, guard, audit, containers, ops, config, docker, log });
+  const compose = new ComposeService({
+    runner,
+    policy,
+    guard,
+    audit,
+    containers,
+    ops,
+    config,
+    docker,
+    log,
+    ignore: ignoreList,
+    helper,
+  });
   containers.setRecreator(compose);
   const disk = new DiskUsageService({ docker, config, busy: () => ops.busy() });
   const eventsRepo = new EventsRepo(db);
   const statsRepo = new StatsRepo(db);
   const events = new EventWatcher({ docker, repo: eventsRepo, containers, log });
+  const ignores = new IgnoreService({
+    repo: ignoreRepo,
+    list: ignoreList,
+    compose,
+    containers,
+    guard,
+    audit,
+    onChange: () => void events.rebaseline(),
+  });
   const stats = new StatsSampler({
     docker,
     containers,
@@ -320,10 +374,11 @@ async function build(
     staged: stagedRepo,
     projectImageRefs: async () => {
       const refs = new Set<string>();
-      for (const p of await compose.discover()) {
+      // ignored projects still own their images: "stop monitoring" must never make them look unused
+      for (const p of await compose.discoverAll()) {
         if (p.level !== 'full') continue;
         try {
-          const cfg = (await compose.resolvedConfig(p.name)).config;
+          const cfg = (await compose.resolvedConfig(p.name, false, true)).config;
           for (const svc of Object.values(cfg.services ?? {})) {
             if (!svc.image) continue;
             refs.add(svc.image);
@@ -356,11 +411,11 @@ async function build(
         networks: new Map(),
       };
       try {
-        for (const p of await compose.discover()) {
+        for (const p of await compose.discoverAll()) {
           own.projects.add(p.name);
           if (p.level !== 'full') continue;
           try {
-            const cfg = (await compose.resolvedConfig(p.name)).config;
+            const cfg = (await compose.resolvedConfig(p.name, false, true)).config;
             for (const [key, v] of Object.entries(cfg.volumes ?? {}))
               own.volumes.set(v?.name ?? `${p.name}_${key}`, p.name);
             for (const [key, v] of Object.entries(cfg.networks ?? {}))
@@ -468,6 +523,8 @@ async function build(
     runner,
     policy,
     compose,
+    ignores,
+    helper,
     clock,
     notifications,
     registry,
@@ -506,4 +563,50 @@ async function build(
       releaseLock();
     },
   };
+}
+
+/**
+ * Host paths the read-only helper must never bind-mount: the Docker data root and wherever Quaymaster's data
+ * directory really lives (the host source of the mount that holds it, or the directory itself outside a container).
+ */
+export function helperDeniedDirs(
+  raw: { Mounts?: { Type?: string; Source?: string; Destination?: string }[] } | null,
+  config: Pick<Config, 'dataDir'>,
+  dockerRoot: string | null,
+): string[] {
+  const under = (child: string, parent: string): boolean =>
+    child === parent || child.startsWith(parent.endsWith('/') ? parent : `${parent}/`);
+  const out = new Set<string>();
+  if (dockerRoot) out.add(dockerRoot);
+  out.add(path.resolve(config.dataDir));
+  for (const m of raw?.Mounts ?? []) {
+    if (m.Source && m.Destination && under(path.resolve(config.dataDir), m.Destination)) out.add(m.Source);
+  }
+  return [...out].filter((d) => path.isAbsolute(d) && d !== '/');
+}
+
+/** Bind mounts of Quaymaster's own container whose host path equals the container path, minus the ones that must never count. */
+export function selfMountRoots(
+  raw: { Mounts?: { Type?: string; Source?: string; Destination?: string }[] } | null,
+  config: Pick<Config, 'dataDir' | 'dockerSocket'>,
+  dockerRoot: string | null,
+): string[] {
+  const under = (child: string, parent: string): boolean =>
+    child === parent || child.startsWith(parent.endsWith('/') ? parent : `${parent}/`);
+  const out: string[] = [];
+  for (const m of raw?.Mounts ?? []) {
+    const src = m.Source;
+    if (m.Type !== 'bind' || !src || src !== m.Destination || !path.isAbsolute(src) || src === '/') continue;
+    if (['/proc', '/sys', '/dev', '/etc', '/run', '/var/run', '/boot'].some((d) => under(src, d))) continue;
+    // never the data directory or anything above it, the Docker socket, or the Docker data root
+    if (under(config.dataDir, src) || under(config.dockerSocket, src)) continue;
+    if (dockerRoot && (under(src, dockerRoot) || under(dockerRoot, src))) continue;
+    try {
+      if (!statSync(src).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    out.push(src);
+  }
+  return [...new Set(out)];
 }

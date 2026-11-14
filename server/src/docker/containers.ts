@@ -7,6 +7,7 @@ import { redactDeep } from '../redaction/redact.js';
 import { type Guard, withPermit } from '../security/guard.js';
 import { AppError, badRequest, conflict, notFound } from '../util/errors.js';
 import { cleanLogLine, demuxBuffer, LogDemuxer, type LogLine, RateLimitedPump } from './logs.js';
+import type { IgnoreList } from './ignore.js';
 import { isSafeRef, LABEL, learnSecrets, toSummary } from './model.js';
 
 export interface Actor {
@@ -74,12 +75,34 @@ export class ContainerService {
     this.recreator = r;
   }
 
+  private ignore: IgnoreList | null = null;
+
+  /** Wires the "stop monitoring" list; ignored containers vanish from `listRaw` and are refused by `resolve`. */
+  setIgnoreList(l: IgnoreList): void {
+    this.ignore = l;
+  }
+
+  get ignoreList(): IgnoreList | null {
+    return this.ignore;
+  }
+
   invalidate(): void {
     this.cache = null;
   }
 
-  /** Raw list (all containers incl. stopped) with a short cache and single-flight refresh. */
+  /** Raw list of MONITORED containers: visibility scope and the ignore list applied. */
   async listRaw(fresh = false): Promise<Dockerode.ContainerInfo[]> {
+    const all = await this.listRawAll(fresh);
+    const ig = this.ignore;
+    if (!ig || ig.all().length === 0) return all;
+    return all.filter((c) => !ig.isContainerIgnored(c.Names?.[0] ?? c.Id, c.Labels));
+  }
+
+  /**
+   * Every container the daemon reports (visibility scope applied, ignore list NOT applied). Only for safety
+   * computations that must see everything — "is this image/volume/network in use?" — never for display or actions.
+   */
+  async listRawAll(fresh = false): Promise<Dockerode.ContainerInfo[]> {
     if (!fresh && this.cache && Date.now() - this.cache.at < ContainerService.CACHE_MS)
       return this.cache.value;
     if (this.inflight) return this.inflight;
@@ -102,6 +125,16 @@ export class ContainerService {
         this.inflight = null;
       });
     return this.inflight;
+  }
+
+  /**
+   * Every container on the daemon: neither the visibility scope nor the ignore list applied. For safety fences that
+   * must count containers the operator cannot see or has hidden (RT4-04); never return these to a client as is.
+   */
+  async listDaemonAll(): Promise<Dockerode.ContainerInfo[]> {
+    return this.d.docker.listContainers({ all: true }).catch((e: unknown) => {
+      throw mapDockerError(e);
+    });
   }
 
   async list(): Promise<ContainerSummary[]> {
@@ -158,6 +191,13 @@ export class ContainerService {
     }
     const labels = raw.Config?.Labels ?? {};
     if (!this.d.guard.containerVisible(raw.Name, labels[LABEL.project] ?? null)) throw notFound('Container');
+    if (this.ignore?.isContainerIgnored(raw.Name, labels)) {
+      throw new AppError(
+        409,
+        'ignored',
+        'This container is on the "stopped monitoring" list. Restore it in Settings to manage it again.',
+      );
+    }
     learnSecrets(raw.Config, this.d.config.redactAllEnv);
     return {
       id: raw.Id,

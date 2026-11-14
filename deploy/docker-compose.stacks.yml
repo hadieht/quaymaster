@@ -1,0 +1,9 @@
+# Optional: lets Quaymaster update/redeploy Compose projects whose files live under DEPLOY_STACKS_DIR.
+# Not needed for discovery, monitoring, logs, start/stop/restart or the read-only configuration view.
+#   docker compose --env-file .env -f deploy/docker-compose.yml -f deploy/docker-compose.stacks.yml up -d
+# The directory is mounted at the IDENTICAL path (Compose resolves relative bind mounts on the host) and is
+# picked up automatically as an allowed stack root. Use any path, e.g. DEPLOY_STACKS_DIR=/srv/stacks.
+services:
+  quaymaster:
+    volumes:
+      - ${DEPLOY_STACKS_DIR:?set DEPLOY_STACKS_DIR to the stacks directory}:${DEPLOY_STACKS_DIR}

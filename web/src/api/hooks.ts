@@ -7,6 +7,8 @@ import type {
   ComposeProjectDetail,
   ComposeProjectSummary,
   ComposeValidation,
+  IgnoredEntry,
+  ProjectFilesView,
   ContainerDetail,
   ContainerSummary,
   DependencyGraph,
@@ -114,10 +116,7 @@ export const q = {
   }),
   projectConfig: (name: string, enabled: boolean) => ({
     queryKey: ['project-config', name],
-    queryFn: () =>
-      api.get<{ config: unknown; warnings: string[] }>(
-        `/compose/projects/${encodeURIComponent(name)}/config`,
-      ),
+    queryFn: () => api.get<ProjectFilesView>(`/compose/projects/${encodeURIComponent(name)}/config`),
     enabled,
     retry: false,
   }),
@@ -126,6 +125,10 @@ export const q = {
     queryFn: () => api.get<ComposeValidation>(`/compose/projects/${encodeURIComponent(name)}/validate`),
     enabled,
     retry: false,
+  }),
+  ignored: () => ({
+    queryKey: ['ignored'],
+    queryFn: () => api.get<{ entries: IgnoredEntry[] }>('/ignored'),
   }),
   images: () => ({
     queryKey: ['images'],
@@ -254,6 +257,7 @@ const DOCKER_KEYS = [
   'container',
   'projects',
   'project',
+  'ignored',
   'images',
   'updates',
   'staged',

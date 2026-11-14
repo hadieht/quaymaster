@@ -308,6 +308,22 @@ CREATE TABLE notification_dedupe (
 );
 `,
   },
+  {
+    version: 3,
+    name: 'ignored_targets',
+    sql: `
+-- "Stop monitoring": Quaymaster-side ignore list. Purely a filter; never touches Docker resources or files.
+CREATE TABLE ignored_targets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind TEXT NOT NULL CHECK (kind IN ('project','container')),
+  name TEXT NOT NULL,
+  working_dir TEXT NOT NULL DEFAULT '',
+  ignored_at INTEGER NOT NULL,
+  ignored_by TEXT NOT NULL,
+  UNIQUE (kind, name, working_dir)
+);
+`,
+  },
 ];
 
 export function runMigrations(db: Db, opts: { backupDir?: string; migrations?: Migration[] } = {}): number[] {

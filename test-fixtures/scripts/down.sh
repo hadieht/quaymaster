@@ -2,7 +2,7 @@
 # Tears the fixtures down (containers, fixture networks and volumes). Never prunes anything.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
-for s in "${STACKS[@]}"; do
+for s in "${STACKS[@]}" qmtest-dynamic; do
   compose_stack "$s" down --volumes --timeout 3 >/dev/null 2>&1 || true
 done
 remove_if_fixture "$STANDALONE"

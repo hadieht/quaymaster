@@ -62,6 +62,10 @@ const schema = z.object({
   QM_PROTECTED: list.default(''),
   QM_SELF_CONTAINER: z.string().optional(),
   QM_STACK_PATHS: list.default(''),
+  QM_STACK_AUTO_MOUNTS: bool.default('true'),
+  QM_HELPER_ENABLED: bool.default('true'),
+  QM_HELPER_IMAGE: z.string().max(300).optional(),
+  QM_HELPER_LABELS: list.default(''),
   QM_DOCKER_SOCKET: z.string().default('/var/run/docker.sock'),
   QM_DOCKER_ROOT_MOUNT: z.string().optional(),
   QM_REDACT_ALL_ENV: bool.default('false'),
@@ -105,6 +109,10 @@ export interface Config {
   protectedNames: string[];
   selfContainer: string | null;
   stackPaths: string[];
+  /** Treat directories bind-mounted into Quaymaster's own container at the SAME path as allowed stack roots. */
+  stackAutoMounts: boolean;
+  /** Read-only helper container used to read Compose files of projects that are not mounted. */
+  helper: { enabled: boolean; image: string | null; labels: Record<string, string> };
   dockerSocket: string;
   dockerRootMount: string | null;
   redactAllEnv: boolean;
@@ -187,10 +195,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     }
   }
 
-  if (e.QM_STACK_PATHS.length === 0) {
-    problems.push(
-      'QM_STACK_PATHS is required: comma-separated absolute directories that may contain Compose projects',
-    );
+  const helperLabels: Record<string, string> = {};
+  for (const kv of e.QM_HELPER_LABELS) {
+    const m = /^([A-Za-z0-9][A-Za-z0-9._-]{0,127})=([A-Za-z0-9._-]{0,128})$/.exec(kv);
+    if (!m) problems.push(`QM_HELPER_LABELS: "${kv}" is not key=value (letters, digits, . _ -)`);
+    else helperLabels[m[1] as string] = m[2] as string;
+  }
+  if (e.QM_HELPER_IMAGE !== undefined && !/^[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,299}$/.test(e.QM_HELPER_IMAGE)) {
+    problems.push('QM_HELPER_IMAGE: not a valid image reference');
   }
   for (const p of e.QM_STACK_PATHS) {
     if (!path.isAbsolute(p)) problems.push(`QM_STACK_PATHS: "${p}" is not an absolute path`);
@@ -249,6 +261,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     protectedNames: e.QM_PROTECTED,
     selfContainer: e.QM_SELF_CONTAINER ?? null,
     stackPaths: e.QM_STACK_PATHS.map((p) => path.resolve(p)),
+    stackAutoMounts: e.QM_STACK_AUTO_MOUNTS,
+    helper: { enabled: e.QM_HELPER_ENABLED, image: e.QM_HELPER_IMAGE ?? null, labels: helperLabels },
     dockerSocket: e.QM_DOCKER_SOCKET,
     dockerRootMount: e.QM_DOCKER_ROOT_MOUNT ?? null,
     redactAllEnv: e.QM_REDACT_ALL_ENV,

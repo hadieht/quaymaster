@@ -12,6 +12,7 @@ import { globalScrubber, redactDeep, redactText } from './redaction/redact.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerComposeRoutes } from './routes/compose.js';
 import { registerContainerRoutes } from './routes/containers.js';
+import { registerIgnoreRoutes } from './routes/ignored.js';
 import { registerInventoryRoutes } from './routes/inventory.js';
 import { registerStorageRoutes } from './routes/storage.js';
 import { registerMiscRoutes } from './routes/misc.js';
@@ -279,6 +280,7 @@ export async function buildApp(ctx: AppContext): Promise<FastifyInstance> {
       registerSystemRoutes(api, ctx);
       registerContainerRoutes(api, ctx);
       registerComposeRoutes(api, ctx);
+      registerIgnoreRoutes(api, ctx);
       registerInventoryRoutes(api, ctx);
       registerStorageRoutes(api, ctx);
       registerMiscRoutes(api, ctx);

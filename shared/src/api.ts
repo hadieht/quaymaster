@@ -18,6 +18,7 @@ export type ErrorCode =
   | 'confirmation_required'
   | 'blocked_drift'
   | 'limited_capability'
+  | 'ignored'
   | 'unsupported'
   | 'docker_unavailable'
   | 'compose_failed'
@@ -131,11 +132,48 @@ export interface ComposeServiceInfo {
   replicas: number;
 }
 
+/** Why Quaymaster cannot use a project's Compose files (each project may have several). */
+export type ReasonCode =
+  | 'not_mounted'
+  | 'not_readable'
+  | 'file_missing'
+  | 'untrusted'
+  | 'path_not_allowed'
+  | 'no_labels'
+  | 'conflict'
+  | 'unsafe_name'
+  | 'remote_include'
+  | 'duplicate_dir';
+
+export interface ProjectReason {
+  code: ReasonCode;
+  /** One precise sentence; never contains file contents. */
+  message: string;
+  /** What the operator can do about it (generic, copy-pasteable), when there is something to do. */
+  hint?: string;
+}
+
+/** How Quaymaster can read the project's files: directly, via a short-lived read-only helper, or not at all. */
+export type FileAccess = 'local' | 'helper' | 'none';
+
+export interface MountHint {
+  /** Directory on the Docker host, as recorded in the container labels. */
+  path: string;
+  /** Line for the `volumes:` list of the Quaymaster service. */
+  volume: string;
+  /** Optional extra allow-list entry (only needed when automatic mount detection is disabled). */
+  stackPaths: string;
+}
+
 export interface ComposeProjectSummary {
   name: string;
   level: CapabilityLevel;
   /** Human-readable reasons for level `limited` (empty for full). */
   reasons: string[];
+  /** The same reasons with a stable code and an operator hint. */
+  reasonDetails: ProjectReason[];
+  fileAccess: FileAccess;
+  mountHint: MountHint | null;
   workingDir: string | null;
   configFiles: string[];
   source: 'containers' | 'scan' | 'both';
@@ -144,6 +182,35 @@ export interface ComposeProjectSummary {
   composeVersions: string[];
   protectedReason: string | null;
   mutable: boolean;
+}
+
+export interface IgnoredEntry {
+  id: number;
+  kind: 'project' | 'container';
+  name: string;
+  /** Compose working directory the entry was created for ('' for standalone containers). */
+  workingDir: string;
+  ignoredAt: string;
+  ignoredBy: string;
+}
+
+export interface IgnoreRequest {
+  kind: 'project' | 'container';
+  /** Compose project name, or the container name for a standalone container. */
+  name: string;
+  /** Typed confirmation: must equal `name`. */
+  confirm: string;
+}
+
+/** Read-only view of a project's configuration. */
+export interface ProjectFilesView {
+  /** `compose`: resolved by `docker compose config`. `files`: parsed from the project's own files (read-only helper). */
+  source: 'compose' | 'files';
+  config: unknown;
+  warnings: string[];
+  /** For `files`: names of the files that were read, and the .env KEYS (values are never returned). */
+  files?: string[];
+  envKeys?: string[];
 }
 
 export type DependencyEdgeKind = 'depends_on' | 'shares_namespace' | 'volumes_from';

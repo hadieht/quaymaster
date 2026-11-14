@@ -27,10 +27,11 @@ import {
 import { bytes, dateTime, duration } from '@/lib/format';
 import { useAuth, useGate, useMode } from '@/state/auth';
 import { PolicyForm } from './maintenance/Policies';
+import { IgnoredPanel } from './settings/Ignored';
 import { NotificationsPanel } from './settings/Notifications';
 import { PasswordCard, SessionsCard, UsersCard } from './settings/Security';
 
-type Tab = 'general' | 'security' | 'notifications' | 'registries' | 'updates' | 'thresholds';
+type Tab = 'general' | 'security' | 'notifications' | 'registries' | 'ignored' | 'updates' | 'thresholds';
 
 function General() {
   const settings = useQuery(q.settings());
@@ -412,6 +413,7 @@ export default function SettingsPage() {
           { key: 'security', label: 'Security' },
           { key: 'notifications', label: 'Notifications' },
           ...(isAdmin ? [{ key: 'registries' as const, label: 'Registries' }] : []),
+          ...(isAdmin ? [{ key: 'ignored' as const, label: 'Ignored projects' }] : []),
           { key: 'updates', label: 'Update policy' },
           { key: 'thresholds', label: 'Thresholds' },
         ]}
@@ -431,6 +433,9 @@ export default function SettingsPage() {
       </TabPanel>
       <TabPanel id="registries" tab={tab}>
         <Registries />
+      </TabPanel>
+      <TabPanel id="ignored" tab={tab}>
+        <IgnoredPanel />
       </TabPanel>
       <TabPanel id="updates" tab={tab}>
         <DefaultPolicy />

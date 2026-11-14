@@ -510,8 +510,12 @@ export class Planner {
           impact.dependents.push({ service: e.from, via: s.service, kind: e.kind });
       }
     }
-    const allContainers = await this.d.containers.listRaw(true);
+    // RT4-04: count EVERY container on the daemon. `listRaw` hides containers on the "stopped monitoring" list and
+    // outside QM_VISIBLE_SCOPE, and a hidden container still runs the moved tag on its next recreate.
+    const allContainers = await this.d.containers.listDaemonAll();
     const myRefs = new Map(services.filter((s) => s.role === 'update').map((s) => [cacheKeyOf(s.ref), s]));
+    const sharing: { c: Dockerode.ContainerInfo; name: string; project: string | null }[] = [];
+    let hiddenSharing = 0;
     for (const c of allContainers) {
       const key = cacheKeyOf(c.Image);
       const hit = myRefs.get(key);
@@ -520,33 +524,48 @@ export class Planner {
       const service = c.Labels?.[LABEL.service] ?? null;
       const mine = project === req.project && service !== null && inRun.has(service);
       if (mine) continue;
+      const containerName = (c.Names?.[0] ?? c.Id.slice(0, 12)).replace(/^\//, '');
+      sharing.push({ c, name: containerName, project });
+      if (!this.d.guard.containerVisible(containerName, project)) {
+        hiddenSharing++; // never named in the plan: the operator may not see it
+        continue;
+      }
       impact.sharedTag.push({
         ref: c.Image,
-        containerName: (c.Names?.[0] ?? c.Id.slice(0, 12)).replace(/^\//, ''),
+        containerName,
         project,
         service,
         inRun: false,
         note: 'references the same tag: it will deploy the new image the next time anything recreates it (the tag moves during this run)',
       });
     }
+    if (hiddenSharing > 0)
+      warnings.push(
+        `${hiddenSharing} container(s) outside the visible scope also use this tag and will run the new image when recreated`,
+      );
 
     // F-06 (RT-03): the tag moves for EVERY container that uses it; never for ones outside the managed scope
     // (or protected ones, e.g. Quaymaster itself), because the next recreate of those would deploy the new image
     {
       const fenced: string[] = [];
-      for (const t of impact.sharedTag) {
-        const c = allContainers.find((x) => (x.Names?.[0] ?? '').replace(/^\//, '') === t.containerName);
-        if (!c) continue;
-        const r = this.d.guard.containerRefusal({ id: c.Id, name: t.containerName, project: t.project });
-        if (r && r.code !== 'read_only') fenced.push(t.containerName);
+      let fencedHidden = 0;
+      for (const s of sharing) {
+        const r = this.d.guard.containerRefusal({ id: s.c.Id, name: s.name, project: s.project });
+        if (!r || r.code === 'read_only') continue;
+        if (this.d.guard.containerVisible(s.name, s.project)) fenced.push(s.name);
+        else fencedHidden++;
       }
+      const all = [
+        ...fenced,
+        ...(fencedHidden > 0 ? [`${fencedHidden} container(s) outside the visible scope`] : []),
+      ];
       checks.push({
         name: 'containers sharing the image tag are within the managed scope',
-        ok: fenced.length === 0,
+        ok: all.length === 0,
         detail:
-          fenced.length === 0
+          all.length === 0
             ? 'ok'
-            : `${fenced.join(', ')} use the same tag but are outside QM_MANAGED_SCOPE or protected; moving the tag would change what they run on their next recreate`,
+            : `${all.join(', ')} use the same tag but are outside QM_MANAGED_SCOPE or protected; moving the tag would change what they run on their next recreate`,
       });
     }
 

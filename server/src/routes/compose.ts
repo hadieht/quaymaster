@@ -36,7 +36,11 @@ export function registerComposeRoutes(app: FastifyInstance, ctx: AppContext): vo
 
   /** Redacted resolved configuration (secrets are masked server-side; there is no reveal API). */
   app.get<{ Params: { name: string } }>('/compose/projects/:name/config', async (req) =>
-    ctx.compose.configView(projectName(req.params.name)),
+    ctx.compose.configView(projectName(req.params.name), {
+      actor: actorOf(req),
+      // the read-only helper creates a container: administrators only (RT4-05)
+      mayUseHelper: req.auth ? ctx.auth.can(req.auth, 'write') : false,
+    }),
   );
 
   /** `docker compose config --quiet` plus path-policy checks. Read-only. */

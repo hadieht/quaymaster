@@ -1,0 +1,25 @@
+# Fixture for dynamic discovery: the integration tests start Quaymaster instances that do NOT list this
+# directory as a stack path, to prove the project is still discovered and explained.
+# The tests write a throw-away .env next to this file (git-ignored) and remove it afterwards.
+name: qmtest-dynamic
+
+services:
+  app:
+    image: ${QM_TEST_IMAGE:-alpine:latest}
+    pull_policy: never
+    init: true
+    entrypoint: []
+    healthcheck:
+      disable: true # a borrowed image (QM_TEST_IMAGE) may bring its own HEALTHCHECK
+    stop_grace_period: 2s
+    command: ["sh", "-c", "echo dynamic started; exec sleep 3600"]
+    environment:
+      DYN_PASSWORD: ${DYN_PASSWORD:-unset}
+    labels:
+      quaymaster.test: "true"
+
+networks:
+  default:
+    name: qmtest-dynamic_default
+    labels:
+      quaymaster.test: "true"

@@ -166,6 +166,11 @@ export class EventWatcher extends EventEmitter {
     this.flush();
   }
 
+  /** Re-reads the inventory without emitting "missed event" records (used when the ignore list changes). */
+  async rebaseline(): Promise<void> {
+    await this.snapshot(false).catch(() => undefined);
+  }
+
   private async snapshot(emitDiff: boolean): Promise<void> {
     const list = await this.d.containers.listRaw(true);
     const after = new Map<string, Known>();
@@ -250,6 +255,15 @@ export class EventWatcher extends EventEmitter {
     if (this.recent.has(key)) return; // overlap from `since` on reconnect
     this.recent.add(key);
     if (this.recent.size > 2000) this.recent.delete(this.recent.values().next().value as string);
+    // containers on the "stopped monitoring" list produce no events, history or notifications
+    if (
+      raw.Type === 'container' &&
+      this.d.containers.ignoreList?.isContainerIgnored(
+        raw.Actor?.Attributes?.['name'] ?? '',
+        raw.Actor?.Attributes,
+      )
+    )
+      return;
     const ev = sanitizeEvent(raw);
     const g = this.d.containers.guard;
     if (ev && (!g.visibilityRestricted || (ev.name ? g.visible(ev.name) : false))) this.enqueue(ev);

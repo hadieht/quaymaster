@@ -3,6 +3,19 @@
 All notable changes are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-11-14
+
+### Added
+
+- **Automatic project discovery.** Every Compose project Docker reports (running or stopped) is listed with no configuration, whatever its path. `QM_STACK_PATHS` is now optional; it and directories that are bind-mounted into Quaymaster at the same path (`QM_STACK_AUTO_MOUNTS`, default on) are the places where update, redeploy and the resolved configuration work.
+- **Precise reasons instead of one generic banner.** Each limited project says why (`not_mounted`, `not_readable`, `file_missing`, `untrusted`, `path_not_allowed`, ...) and carries a generic, copy-pasteable mount hint (`reasonDetails`, `mountHint`, `fileAccess` in the API).
+- **Read-only file helper.** For a project whose directory is not mounted, the configuration can still be shown: Quaymaster starts a short-lived, label-marked container (no network, no capabilities, read-only root, the directory mounted read-only) that returns only compose/`.env` files; `.env` values are never returned. `QM_HELPER_ENABLED`, `QM_HELPER_IMAGE`, `QM_HELPER_LABELS`. Not available in read-only mode or outside `QM_MANAGED_SCOPE`.
+- **Stop monitoring.** Administrators can remove a Compose project (or a standalone container) from Quaymaster with a typed confirmation: `GET/POST /ignored`, `DELETE /ignored/:id`. Ignore only filters Quaymaster's view; it never changes containers, volumes, networks, images or files, and ignored projects keep protecting their resources from cleanup. Refused with error code `ignored` on every endpoint. Migration 3.
+
+### Changed
+
+- `deploy/docker-compose.yml` no longer mounts a stacks directory; see `deploy/docker-compose.stacks.yml` for the optional mount.
+
 ## [0.1.2] - 2026-11-12
 
 ### Fixed

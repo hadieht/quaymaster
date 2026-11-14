@@ -166,3 +166,23 @@ NOTE items RT-31 (version negotiation), RT-33 (Compose versions shown per projec
   not offered. `docker builder prune` remains a manual step (documented).
 - **Not done:** per-item removal for networks does not offer an opt-in for Compose-defined networks (networks hold no
   data and `compose up` recreates them; the bulk and single paths both keep them).
+
+## ADR: dynamic Compose project discovery and file access (unreleased, 0.2.0)
+
+**Context.** Update/redeploy/config used to work only for projects under `QM_STACK_PATHS` that were also mounted at the identical path. Everything else showed one generic banner and, before that, startup failed without `QM_STACK_PATHS`.
+
+**Options considered.**
+
+- (a) _Read-only helper container_: created through the Docker API, bind-mounts the project's directory read-only, prints only compose/`.env` files. Works for any path the daemon can see, with no mount in Quaymaster.
+- (b) _Require a mount_ (previous behaviour) with a clear, per-project hint.
+- (c) _Run `docker compose` for update/redeploy inside the helper._ Would remove the last mount requirement, but needs the compose CLI in the helper image, the project's relative bind mounts and env files resolved inside it, streaming output, and a permit model for compose-in-container. Too large and risky for this release.
+
+**Decision.** Ship (a) for reading and (b) for acting. Discovery is label-driven and needs no configuration. Update, redeploy and `docker compose config` still require the files to be readable by Quaymaster under an allowed root. Allowed roots are `QM_STACK_PATHS` plus directories mounted into Quaymaster's own container at the same path (read from its own container inspect, so a label cannot forge them; switch off with `QM_STACK_AUTO_MOUNTS=false`). (c) is deferred.
+
+**Helper rules.** Image: `QM_HELPER_IMAGE` or Quaymaster's own image; never pulled. No network, all capabilities dropped, no-new-privileges, read-only root, 128 MiB, 64 pids, directory mounted read-only via the Mounts API (no `:` parsing). Fixed script, argv array, no shell. Refuses symlinks, non-regular and world-writable files, files over 1 MiB; a world-writable directory makes the project untrusted. Output is re-validated on our side (names, sizes). Only used for projects inside `QM_MANAGED_SCOPE`, never in read-only mode, force-removed in a `finally`, stale helpers swept by label and name. Creation/start/removal go through the transport permits like every other mutation. The helper shows the files as written (not interpolated) and `.env` keys only.
+
+**Threat model.** Anyone who can create a container with forged Compose labels already has root through the socket. What must not widen is what a Quaymaster _user_ can read. So a label is never trusted by itself: the working directory must be absolute, canonical, free of `..`/control characters, not `/` or a pseudo filesystem; only compose-like and `.env*` names (plus explicit `config_files` entries under that directory) are read; responses are redacted as before; non-admins see exactly what they saw before (redacted configuration).
+
+**Stop monitoring.** An ignore list in SQLite keyed by (kind, name, working directory), not a Docker operation. It is allowed in read-only mode and for out-of-scope resources because it only hides things from Quaymaster. Safety computations (image/volume/network ownership and in-use checks) deliberately ignore the ignore list, so hiding a project can never make its resources look unused. Ignoring Quaymaster's own project is refused. No "destroy project" feature exists.
+
+**Known risks / limits.** The helper image must contain Node.js and be present locally. Containers with conflicting labels can reappear as a second entry after ignoring. Stored history of events from before the ignore is hidden by name in `GET /events` only.

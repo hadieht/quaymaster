@@ -23,3 +23,12 @@ description = "Fake label secret in the redaction (RT-04) compose fixture"
 condition = "AND"
 paths = ['''^test-fixtures/stacks/qmtest-secrets/compose\.yaml$''']
 targetRules = ["generic-api-key"]
+
+[[allowlists]]
+description = "Fake sentinel secrets used to assert redaction in the discovery/ignore integration tests"
+condition = "AND"
+paths = [
+  '''^server/test/integration/discovery-redteam\.int\.test\.ts$''',
+  '''^server/test/integration/dynamic\.int\.test\.ts$''',
+]
+targetRules = ["generic-api-key"]

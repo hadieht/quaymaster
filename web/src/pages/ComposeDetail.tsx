@@ -7,6 +7,8 @@ import type { ComposeAction, ComposeServiceInfo } from '@/api/types';
 import { CapabilityBadge, ProjectStatus, ServiceStatus } from '@/components/domain/badges';
 import { DependencyGraphView } from '@/components/domain/DependencyGraph';
 import { OperationModal } from '@/components/domain/OperationModal';
+import { ProjectReasons } from '@/components/domain/ProjectReasons';
+import { StopMonitoringButton } from '@/components/domain/StopMonitoring';
 import { ScopeNotice } from '@/components/layout/AppShell';
 import {
   Button,
@@ -252,6 +254,7 @@ export default function ComposeDetailPage() {
         }
         actions={
           <div className="flex flex-wrap gap-1.5">
+            <StopMonitoringButton kind="project" name={name} redirectTo="/compose" />
             {projectActions.map(({ a, icon }) => (
               <Button
                 key={a}
@@ -268,13 +271,21 @@ export default function ComposeDetailPage() {
         }
       />
       <ScopeNotice />
-      <Notice
-        tone={level === 'full' ? 'info' : 'warning'}
-        title={CAPABILITY_TEXT[level].label}
-        className="mb-4"
-      >
-        {CAPABILITY_TEXT[level].text}
-      </Notice>
+      {level === 'full' || !summary.reasonDetails?.length ? (
+        <Notice
+          tone={level === 'full' ? 'info' : 'warning'}
+          title={CAPABILITY_TEXT[level].label}
+          className="mb-4"
+        >
+          {CAPABILITY_TEXT[level].text}
+        </Notice>
+      ) : (
+        <ProjectReasons
+          reasons={summary.reasonDetails}
+          mountHint={summary.mountHint}
+          fileAccess={summary.fileAccess}
+        />
+      )}
       <Tabs
         label="Project sections"
         value={tab}
@@ -340,9 +351,10 @@ export default function ComposeDetailPage() {
             description="Secrets are replaced by redaction markers by the server."
           />
           <CardBody>
-            {level !== 'full' ? (
+            {level !== 'full' && summary.fileAccess !== 'helper' ? (
               <EmptyState icon="lock" title="Not available">
-                The configuration is only shown for projects with full control.
+                The configuration is only shown for projects with full control, or when Quaymaster can read
+                the project files through the read-only helper.
               </EmptyState>
             ) : config.isLoading ? (
               <LoadingState />
@@ -354,6 +366,15 @@ export default function ComposeDetailPage() {
               />
             ) : (
               <>
+                {config.data?.source === 'files' ? (
+                  <Notice tone="info" title="Read from the project files" className="mb-2">
+                    Shown read-only and not resolved by Compose.
+                    {config.data.files?.length ? ` Files: ${config.data.files.join(', ')}.` : ''}
+                    {config.data.envKeys?.length
+                      ? ` Variables defined in .env (values are never shown): ${config.data.envKeys.join(', ')}.`
+                      : ''}
+                  </Notice>
+                ) : null}
                 {config.data?.warnings.map((w) => (
                   <Notice key={w} tone="warning" className="mb-2">
                     {w}

@@ -134,3 +134,7 @@ critical and high findings were fixed, the following were deferred and are recor
 
 The first public release was scanned with gitleaks; the 8 findings are fake credentials in redaction and notification
 tests and fixtures.
+
+## Dynamic discovery and the file helper (0.2.0)
+
+Compose labels are attacker-writable data, but anyone who can create a container with forged labels already has root through the Docker socket. The design goal is that Quaymaster does not widen what a Quaymaster user can read. Labels never grant trust by themselves: update/redeploy/config require the files to be under an administrator-controlled root (`QM_STACK_PATHS` or a same-path mount of Quaymaster's own container, read from its own container inspect). The read-only helper accepts only an absolute, canonical working directory (no `..`, control characters, `/`, `/proc`, `/sys`, `/dev`), reads only compose-like and `.env*` files (plus explicit config files below that directory), refuses symlinks, non-regular and world-writable files, runs without network or capabilities, and its output is re-validated and redacted; `.env` values are never returned. It is not used in read-only mode or for projects outside `QM_MANAGED_SCOPE`. The ignore list only filters; it cannot be used to act on a resource. See docs/DECISIONS.md.

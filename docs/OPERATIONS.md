@@ -201,3 +201,11 @@ history, policies and schedules. Take a backup first. A proper recovery CLI is o
 - Logs go to stdout/stderr as JSON; `QM_LOG_LEVEL=debug` adds detail. Secrets are scrubbed from log output.
 - Settings → General shows the installation's read-only state, scope, stack paths and retention; the audit log (Logs & Events,
   admins) records every login, action and run.
+
+## Project discovery, file access and stop monitoring
+
+**Discovery.** Quaymaster lists every Compose project Docker reports (labels `com.docker.compose.project`, `.working_dir`, `.config_files`, `.service`), including stopped ones, with no configuration. Stacks that are down are also found by a bounded scan of the allowed stack roots.
+
+**What needs a mount, and why.** Start, stop, restart, logs and the dependency view work for every project. Update, redeploy and the resolved configuration run `docker compose` against the project's files, so Quaymaster must read them at the path Docker recorded. Mount the directory into Quaymaster at the identical path (the project page shows the exact line, e.g. `- /srv/stacks/myapp:/srv/stacks/myapp`); it is then trusted automatically, or list its parent in `QM_STACK_PATHS`. Without a mount the project page states the reason (not mounted, not readable, file missing, untrusted ownership or symlink, outside the allowed paths) and, when the read-only helper is available, still shows the redacted configuration.
+
+**Stop monitoring.** On a project page choose _Stop monitoring_ and type the project name. The project disappears from lists, update checks, notifications, schedules and policies and every API call about it is refused with code `ignored`. Nothing is stopped, removed or modified. Restore it under _Settings → Ignored projects_ (or `DELETE /api/v1/ignored/:id`). Standalone containers can be ignored the same way.

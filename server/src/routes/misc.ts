@@ -23,14 +23,15 @@ const auditQuery = z.object({
 export function registerMiscRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.get('/events', async (req) => {
     const q = parseBody(eventsQuery, req.query);
-    return {
-      events: ctx.eventsRepo.list({
+    const events = ctx.eventsRepo
+      .list({
         limit: q.limit,
         beforeId: q.beforeId,
         containerId: q.container,
         project: q.project,
-      }),
-    };
+      })
+      .filter((e) => !ctx.containers.ignoreList?.hidesRecord(e.project ?? null, e.name ?? null));
+    return { events };
   });
 
   // The audit log is admin-only and has no write/update/delete API.

@@ -5,6 +5,7 @@ import { q } from '@/api/hooks';
 import { ApiError } from '@/api/client';
 import type { ContainerSummary, InspectData, StatsPoint } from '@/api/types';
 import { ContainerActions } from '@/components/domain/ContainerActions';
+import { StopMonitoringButton } from '@/components/domain/StopMonitoring';
 import { CapabilityBadge, ContainerStatus, HealthBadge } from '@/components/domain/badges';
 import { LogViewer } from '@/components/domain/LogViewer';
 import { ChartEmpty, TimeChart } from '@/components/domain/TimeChart';
@@ -452,7 +453,21 @@ export default function ContainerDetail() {
           </span>
         }
         description={<span className="font-mono text-xs">{d.inspect.Config.Image}</span>}
-        actions={summary ? <ContainerActions c={summary} size="md" /> : undefined}
+        actions={
+          summary ? (
+            <div className="flex flex-wrap gap-1.5">
+              {summary.composeProject === null ? (
+                <StopMonitoringButton
+                  kind="container"
+                  name={summary.name}
+                  size="md"
+                  redirectTo="/containers"
+                />
+              ) : null}
+              <ContainerActions c={summary} size="md" />
+            </div>
+          ) : undefined
+        }
       />
       {summary?.protectedReason ? (
         <Notice tone="warning" title="Changes are blocked for this container" className="mb-4">

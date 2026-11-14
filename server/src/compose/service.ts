@@ -1,3 +1,4 @@
+import yaml from 'js-yaml';
 import type Dockerode from 'dockerode';
 import type {
   ActionRequest,
@@ -6,10 +7,12 @@ import type {
   ComposeProjectSummary,
   ComposeServiceInfo,
   DependencyGraph,
+  ProjectFilesView,
 } from '@quaymaster/shared';
 import type { AuditService } from '../audit/audit.js';
 import type { Config } from '../config/env.js';
 import type { ContainerService, Actor, Recreator, ResolvedContainer } from '../docker/containers.js';
+import type { IgnoreList } from '../docker/ignore.js';
 import { LABEL, learnSecrets } from '../docker/model.js';
 import type { OperationManager } from '../operations/manager.js';
 import { globalScrubber, redactArgv, redactDeep } from '../redaction/redact.js';
@@ -17,6 +20,14 @@ import type { Guard } from '../security/guard.js';
 import { AppError, badRequest, conflict, notFound } from '../util/errors.js';
 import type { Logger } from '../util/logger.js';
 import { buildComposeArgv, SERVICE_NAME_RE, type ComposeTarget } from './argv.js';
+import type { FileHelper, HelperFile } from './helper.js';
+import {
+  DEFAULT_COMPOSE_NAMES,
+  filesUnderDir,
+  isComposeFileName,
+  isEnvFileName,
+  helperDirAllowed,
+} from './labelpath.js';
 import { buildProjects, scanStackPaths, type ScannedProject } from './discovery.js';
 import {
   buildGraph,
@@ -31,6 +42,27 @@ import { type ComposeRunner, unsetVariableWarnings } from './runner.js';
 
 const DISCOVERY_CACHE_MS = 3000;
 const CONFIG_CACHE_MS = 15_000;
+/** Upper bound on values in one helper-read Compose file once YAML aliases are expanded (RT4-03). */
+export const MAX_YAML_NODES = 50_000;
+
+/**
+ * Counts the values of a parsed YAML document the way a recursive walk (redaction, JSON) would see them: aliased
+ * nodes are counted every time they are referenced. Returns false as soon as `budget` is exceeded, so a cycle or an
+ * alias bomb costs at most `budget` steps.
+ */
+export function withinNodeBudget(doc: unknown, budget: number): boolean {
+  let left = budget;
+  const stack: unknown[] = [doc];
+  while (stack.length > 0) {
+    const v = stack.pop();
+    if (--left < 0) return false;
+    if (v !== null && typeof v === 'object') {
+      for (const c of Array.isArray(v) ? v : Object.values(v as Record<string, unknown>)) stack.push(c);
+      if (stack.length > budget) return false;
+    }
+  }
+  return true;
+}
 
 export interface ComposeDetail {
   summary: ComposeProjectSummary;
@@ -61,6 +93,8 @@ interface CachedConfig {
 export class ComposeService implements Recreator {
   private cache: { at: number; value: ComposeProjectSummary[]; scanned: ScannedProject[] } | null = null;
   private readonly configCache = new Map<string, CachedConfig>();
+  private readonly filesCache = new Map<string, { at: number; view: ProjectFilesView }>();
+  private readonly filesInflight = new Map<string, Promise<ProjectFilesView>>();
 
   constructor(
     private readonly d: {
@@ -73,35 +107,63 @@ export class ComposeService implements Recreator {
       config: Pick<Config, 'stackPaths' | 'redactAllEnv'>;
       docker: Dockerode;
       log: Logger;
+      ignore: IgnoreList;
+      helper: FileHelper;
     },
   ) {}
 
   invalidate(): void {
     this.cache = null;
     this.configCache.clear();
+    this.filesCache.clear();
   }
 
   // ---- discovery --------------------------------------------------------------------------
 
-  async discover(fresh = false): Promise<ComposeProjectSummary[]> {
+  /**
+   * Every Compose project Docker reports (plus down stacks found on disk), INCLUDING the ones on the
+   * "stopped monitoring" list. Only for safety computations (volume/network ownership, image protection).
+   */
+  async discoverAll(fresh = false): Promise<ComposeProjectSummary[]> {
     if (!fresh && this.cache && Date.now() - this.cache.at < DISCOVERY_CACHE_MS) return this.cache.value;
-    const [containers, ls] = await Promise.all([this.d.containers.listRaw(fresh), this.d.runner.ls()]);
-    const scanned = scanStackPaths(this.d.config.stackPaths);
+    const [containers, ls, helper] = await Promise.all([
+      this.d.containers.listRawAll(fresh),
+      this.d.runner.ls(),
+      this.d.helper.status(),
+    ]);
+    const scanned = scanStackPaths(this.d.policy.allowedRoots);
     const value = buildProjects({
       containers,
       ls,
       scanned,
       policy: this.d.policy,
       guard: this.d.guard,
+      helper,
     }).filter((p) => this.d.guard.visible(p.name));
     this.cache = { at: Date.now(), value, scanned };
     return value;
   }
 
-  private async summary(name: string): Promise<ComposeProjectSummary> {
-    const s = (await this.discover()).find((p) => p.name === name);
-    if (!s) throw notFound('Compose project');
-    return s;
+  /** The monitored projects: what the API lists and what every action, update check and schedule works on. */
+  async discover(fresh = false): Promise<ComposeProjectSummary[]> {
+    return (await this.discoverAll(fresh)).filter(
+      (p) => !this.d.ignore.isProjectIgnored(p.name, p.workingDir),
+    );
+  }
+
+  private async summary(name: string, includeIgnored = false): Promise<ComposeProjectSummary> {
+    const all = await this.discoverAll();
+    const s = all.find((p) => p.name === name && !this.d.ignore.isProjectIgnored(p.name, p.workingDir));
+    if (s) return s;
+    if (all.some((p) => p.name === name && this.d.ignore.isProjectIgnored(p.name, p.workingDir))) {
+      if (includeIgnored) return all.find((p) => p.name === name) as ComposeProjectSummary;
+      throw new AppError(
+        409,
+        'ignored',
+        `Project "${name}" is on the "stopped monitoring" list. Restore it in Settings to manage it again.`,
+      );
+    }
+    throw notFound('Compose project');
   }
 
   private async rawContainers(name: string): Promise<Dockerode.ContainerInfo[]> {
@@ -114,7 +176,7 @@ export class ComposeService implements Recreator {
         409,
         'limited_capability',
         `Project "${s.name}" has capability "${s.level}": file-level operations are unavailable. ${s.reasons.join('; ')}`,
-        { level: s.level, reasons: s.reasons },
+        { level: s.level, reasons: s.reasons, reasonDetails: s.reasonDetails, mountHint: s.mountHint },
       );
     }
     return { projectName: s.name, workingDir: s.workingDir, files: s.configFiles };
@@ -123,10 +185,16 @@ export class ComposeService implements Recreator {
   // ---- resolved configuration -------------------------------------------------------------
 
   /** Runs `compose config --format json` (cached briefly). The raw result stays in memory; only redacted views leave. */
-  async resolvedConfig(name: string, fresh = false): Promise<CachedConfig> {
+  async resolvedConfig(name: string, fresh = false, includeIgnored = false): Promise<CachedConfig> {
     const hit = this.configCache.get(name);
-    if (!fresh && hit && Date.now() - hit.at < CONFIG_CACHE_MS) return hit;
-    const target = this.fullTarget(await this.summary(name));
+    if (
+      !fresh &&
+      hit &&
+      Date.now() - hit.at < CONFIG_CACHE_MS &&
+      !(!includeIgnored && this.isIgnoredName(name))
+    )
+      return hit;
+    const target = this.fullTarget(await this.summary(name, includeIgnored));
     const r = await this.d.runner.run(buildComposeArgv(target, { sub: 'config', format: 'json' }), {
       timeoutMs: 60_000,
     });
@@ -157,9 +225,154 @@ export class ComposeService implements Recreator {
     return globalScrubber.clean(s);
   }
 
-  async configView(name: string): Promise<{ config: unknown; warnings: string[] }> {
-    const { config, warnings } = await this.resolvedConfig(name);
-    return { config: redactDeep(config, { redactAllEnv: this.d.config.redactAllEnv }), warnings };
+  private isIgnoredName(name: string): boolean {
+    return (this.cache?.value ?? []).some(
+      (p) => p.name === name && this.d.ignore.isProjectIgnored(p.name, p.workingDir),
+    );
+  }
+
+  /**
+   * Redacted configuration. Full projects: `docker compose config`. Other projects: when the read-only helper can
+   * reach the directory, the project's own files parsed and redacted (not interpolated). Otherwise a precise
+   * `limited_capability` error.
+   */
+  async configView(
+    name: string,
+    opts: { actor?: Actor; mayUseHelper?: boolean } = {},
+  ): Promise<ProjectFilesView> {
+    const s = await this.summary(name);
+    if (s.level === 'full') {
+      const { config, warnings } = await this.resolvedConfig(name);
+      return {
+        source: 'compose',
+        config: redactDeep(config, { redactAllEnv: this.d.config.redactAllEnv }),
+        warnings,
+      };
+    }
+    if (s.fileAccess !== 'helper' || !s.workingDir) {
+      throw new AppError(
+        409,
+        'limited_capability',
+        `The configuration of "${name}" cannot be shown: ${s.reasons.join('; ') || 'files are not accessible'}`,
+        { level: s.level, reasons: s.reasons, reasonDetails: s.reasonDetails, mountHint: s.mountHint },
+      );
+    }
+    // RT4-05: reading through the helper creates a container on the host; that is an administrator action
+    if (opts.mayUseHelper !== true)
+      throw new AppError(
+        403,
+        'forbidden',
+        `The files of "${name}" are not mounted into Quaymaster; reading them through the helper container needs an administrator.`,
+      );
+    const hit = this.filesCache.get(s.name);
+    const cached = hit !== undefined && Date.now() - hit.at < CONFIG_CACHE_MS;
+    const view = await this.filesView(s);
+    if (!cached && opts.actor)
+      this.d.audit.record({
+        actor: opts.actor.name,
+        ip: opts.actor.ip,
+        action: 'compose.files_read',
+        target: s.name,
+        outcome: 'success',
+        params: { workingDir: s.workingDir, files: view.files ?? [], via: 'helper' },
+      });
+    return view;
+  }
+
+  private async filesView(s: ComposeProjectSummary): Promise<ProjectFilesView> {
+    const hit = this.filesCache.get(s.name);
+    if (hit && Date.now() - hit.at < CONFIG_CACHE_MS) return hit.view;
+    const running = this.filesInflight.get(s.name);
+    if (running) return running;
+    const p = this.readViaHelper(s)
+      .then((view) => {
+        this.filesCache.set(s.name, { at: Date.now(), view });
+        return view;
+      })
+      .finally(() => this.filesInflight.delete(s.name));
+    this.filesInflight.set(s.name, p);
+    return p;
+  }
+
+  private async readViaHelper(s: ComposeProjectSummary): Promise<ProjectFilesView> {
+    const dir = helperDirAllowed(s.workingDir ?? '', (await this.d.helper.status()).deniedDirs ?? []);
+    if (!dir.ok)
+      throw new AppError(409, 'limited_capability', `The working directory is not usable: ${dir.reason}`);
+    const { rel, rejected } = filesUnderDir(dir.dir, s.configFiles);
+    const res = await this.d.helper.read(dir.dir, rel);
+    if (!res.ok) {
+      throw new AppError(
+        res.code === 'failed' ? 502 : 409,
+        res.code === 'failed' ? 'internal' : 'limited_capability',
+        `Cannot read the project files: ${res.reason}`,
+      );
+    }
+    // trust: a directory anybody can write to may have had files added or replaced. The sticky bit does not help:
+    // it only stops deleting OTHER users' files, anyone can still drop a new compose.override.yaml in.
+    if (res.dirMode !== null && (res.dirMode & 0o002) !== 0) {
+      throw new AppError(
+        409,
+        'limited_capability',
+        `The project directory is world-writable, so its files are not trusted: ${s.workingDir}`,
+        { reasonDetails: [{ code: 'untrusted', message: 'the project directory is world-writable' }] },
+      );
+    }
+    // the label named files, but none may be read: show nothing rather than some other file of the directory
+    const wanted =
+      rel.length > 0
+        ? rel
+        : s.configFiles.length > 0
+          ? []
+          : [
+              DEFAULT_COMPOSE_NAMES.find((n) =>
+                res.files.some((f) => f.name === n && f.content !== undefined),
+              ) ?? DEFAULT_COMPOSE_NAMES[0]!,
+            ];
+    const byName = new Map<string, HelperFile>(res.files.map((f) => [f.name, f]));
+    const warnings: string[] = rejected.map((r) => `${r.file}: not read (${r.reason})`);
+    const config: Record<string, unknown> = {};
+    const shown: string[] = [];
+    for (const n of wanted) {
+      const f = byName.get(n);
+      const base = n.split('/').pop() ?? n;
+      if (!f || f.content === undefined) {
+        warnings.push(`${n}: ${f?.error ?? 'missing'}`);
+        continue;
+      }
+      if (!isComposeFileName(base)) continue;
+      try {
+        const doc = yaml.load(f.content);
+        // RT4-03: aliases are shared references; expanding them in redaction/JSON can turn a few hundred bytes
+        // into gigabytes. Refuse documents whose expanded size exceeds a sane Compose file.
+        if (!withinNodeBudget(doc, MAX_YAML_NODES)) {
+          warnings.push(
+            `${n}: refused: YAML anchors/aliases expand to more than ${MAX_YAML_NODES} values (or form a cycle)`,
+          );
+          continue;
+        }
+        learnSecrets(doc, this.d.config.redactAllEnv);
+        config[n] = doc;
+        shown.push(n);
+      } catch (e) {
+        warnings.push(`${n}: not valid YAML (${(e as Error).message.split('\n')[0]})`);
+      }
+    }
+    const envKeys: string[] = [];
+    for (const f of res.files) {
+      // the helper returns NAMES only for .env files (RT4-02); values never reach Quaymaster
+      if (!isEnvFileName(f.name) || f.keys === undefined) continue;
+      envKeys.push(...f.keys);
+      shown.push(f.name);
+    }
+    if (shown.length === 0 && warnings.length === 0)
+      warnings.push('no Compose file was found in the directory');
+    return {
+      source: 'files',
+      config: redactDeep(config, { redactAllEnv: this.d.config.redactAllEnv }),
+      warnings,
+      files: shown,
+      envKeys: [...new Set(envKeys)].sort(),
+    };
   }
 
   async validate(name: string): Promise<ValidationResult> {
@@ -403,8 +616,15 @@ export class ComposeService implements Recreator {
           409,
           'limited_capability',
           `"${action}" needs the Compose files, which Quaymaster cannot use for "${name}": ${summary.reasons.join('; ')}. ` +
-            `Mount the project directory at the same absolute path and list it in QM_STACK_PATHS.`,
-          { level: summary.level, reasons: summary.reasons },
+            (summary.mountHint
+              ? `Mount the project directory into Quaymaster at the same path (${summary.mountHint.volume}).`
+              : 'See the project page for what to fix.'),
+          {
+            level: summary.level,
+            reasons: summary.reasons,
+            reasonDetails: summary.reasonDetails,
+            mountHint: summary.mountHint,
+          },
         );
       }
       return this.engineLevelOperation(summary, action as 'start' | 'stop' | 'restart', service, actor, base);

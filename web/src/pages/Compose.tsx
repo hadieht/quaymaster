@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { q } from '@/api/hooks';
 import type { ComposeProjectSummary, CapabilityLevel } from '@/api/types';
 import { CapabilityBadge, ProjectStatus } from '@/components/domain/badges';
+import { REASON_TITLE } from '@/components/domain/ProjectReasons';
 import { ScopeNotice } from '@/components/layout/AppShell';
 import {
   Button,
@@ -48,7 +49,19 @@ export default function ComposePage() {
       key: 'level',
       header: 'Control',
       sort: (a, b) => a.level.localeCompare(b.level),
-      cell: (p) => <CapabilityBadge level={p.level} />,
+      cell: (p) => (
+        <span className="block">
+          <CapabilityBadge level={p.level} />
+          {p.level !== 'full' && p.reasonDetails?.length ? (
+            <span
+              className="mt-1 block max-w-72 text-xs text-muted"
+              title={p.reasonDetails.map((r) => r.message).join('\n')}
+            >
+              {p.reasonDetails.map((r) => REASON_TITLE[r.code] ?? r.code).join('; ')}
+            </span>
+          ) : null}
+        </span>
+      ),
     },
     {
       key: 'services',

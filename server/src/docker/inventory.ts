@@ -27,7 +27,7 @@ export class ImageService {
       this.d.docker.listImages({ all: false }).catch((e: unknown) => {
         throw mapDockerError(e);
       }),
-      this.d.containers.listRaw(),
+      this.d.containers.listRawAll(),
     ]);
     const g = this.d.containers.guard;
     const shown = !g.visibilityRestricted
@@ -82,7 +82,7 @@ export class VolumeService {
       this.d.docker.listVolumes().catch((e: unknown) => {
         throw mapDockerError(e);
       }),
-      this.d.containers.listRaw(),
+      this.d.containers.listRawAll(),
     ]);
     const sizes = this.d.usage.cached()?.volumes ?? {};
     const g = this.d.containers.guard;
@@ -130,7 +130,7 @@ export class NetworkService {
       this.d.docker.listNetworks().catch((e: unknown) => {
         throw mapDockerError(e);
       }),
-      this.d.containers.listRaw(),
+      this.d.containers.listRawAll(),
     ]);
     const g = this.d.containers.guard;
     const shownNets = nets.filter(

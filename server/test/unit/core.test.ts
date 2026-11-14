@@ -43,7 +43,7 @@ const ID = 'a'.repeat(64);
 const hex = (n: string) => n.repeat(64).slice(0, 64);
 
 describe('config', () => {
-  it('loads defaults and requires QM_SECRET_KEY and QM_STACK_PATHS', () => {
+  it('loads defaults; only QM_SECRET_KEY is required (QM_STACK_PATHS is optional since discovery is label-driven)', () => {
     const c = loadConfig(baseEnv);
     expect(c.host).toBe('127.0.0.1');
     expect(c.port).toBe(8787);
@@ -52,8 +52,19 @@ describe('config', () => {
     try {
       loadConfig({ NODE_ENV: 'test' });
     } catch (e) {
-      expect((e as ConfigError).problems.join('\n')).toMatch(/QM_SECRET_KEY[\s\S]*QM_STACK_PATHS/);
+      expect((e as ConfigError).problems.join('\n')).toMatch(/QM_SECRET_KEY/);
+      expect((e as ConfigError).problems.join('\n')).not.toMatch(/QM_STACK_PATHS/);
     }
+    const bare = loadConfig({ NODE_ENV: 'test', QM_SECRET_KEY: KEY });
+    expect(bare.stackPaths).toEqual([]);
+    expect(bare.stackAutoMounts).toBe(true);
+    expect(bare.helper).toEqual({ enabled: true, image: null, labels: {} });
+    expect(() => loadConfig({ ...baseEnv, QM_STACK_PATHS: 'relative/dir' })).toThrow(/absolute/);
+    expect(loadConfig({ ...baseEnv, QM_HELPER_LABELS: 'a.b=c,d=e' }).helper.labels).toEqual({
+      'a.b': 'c',
+      d: 'e',
+    });
+    expect(() => loadConfig({ ...baseEnv, QM_HELPER_LABELS: 'no-equals' })).toThrow(/QM_HELPER_LABELS/);
   });
   it('rejects weak keys, unknown variables, bad origins and open trust-proxy', () => {
     expect(() => decodeSecretKey('short')).toThrow();

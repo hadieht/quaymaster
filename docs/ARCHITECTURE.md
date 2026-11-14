@@ -464,3 +464,7 @@ Decisions on points the review left open:
 - Remaining NOTE items (RT-31, RT-33 … RT-37, RT-41) are accepted as written.
 
 Implementers record how each finding was addressed in `docs/DECISIONS.md`.
+
+## Dynamic discovery, file helper and ignore list (0.2.0)
+
+`compose/discovery.ts` builds the project list from container labels (all containers, including stopped) plus the scan of allowed roots; each limited project carries `reasonDetails`, `mountHint` and `fileAccess`. `compose/labelpath.ts` validates label paths, `compose/paths.ts` is the allow-list (with same-path mounts of the own container), `compose/helper.ts` runs the read-only helper container, `docker/ignore.ts` + `db/ignore.ts` + `compose/ignore-service.ts` implement the ignore list. `ContainerService.listRaw` hides ignored containers; `listRawAll`/`ComposeService.discoverAll` are for safety computations only.

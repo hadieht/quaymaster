@@ -105,7 +105,7 @@ export class CleanupService {
     const now = this.now();
     const candidates: CleanupCandidate[] = [];
     const protectedList: CleanupProtected[] = [];
-    const containers = await this.d.containers.listRaw(true);
+    const containers = await this.d.containers.listRawAll(true);
     // Red-team RT3-03: "in use" must be computed from EVERY container on the daemon. `listRaw` is filtered by
     // QM_VISIBLE_SCOPE, so an image used only by an invisible (stopped) container looked unused and execute
     // untagged it tag by tag until Docker refused the last one. Visibility only limits what we show/remove.
@@ -346,7 +346,7 @@ export class CleanupService {
     const t0 = this.now();
     const { reclaim } = await measureReclaim(this.d.usage, this.d.freeBytes, async () => {
       // unfiltered by QM_VISIBLE_SCOPE for the in-use re-check (RT3-03); `containers` stays the visible list
-      const containers = await this.d.containers.listRaw(true);
+      const containers = await this.d.containers.listRawAll(true);
       const allNow = await this.d.docker.listContainers({ all: true });
       const usedNow = new Set(allNow.map((c) => c.ImageID));
       const referencedNow = await this.d.projectImageRefs();

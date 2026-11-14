@@ -99,7 +99,9 @@ describe('discovery and read endpoints (real daemon, fixtures + read-only look a
     for (const p of real) {
       expect(p.level).toBe('limited');
       expect(p.mutable).toBe(false);
-      expect(p.reasons.join(' ')).toMatch(/outside QM_STACK_PATHS|labels|does not exist/);
+      expect(p.reasons.join(' ')).toMatch(
+        /outside (QM_STACK_PATHS|the allowed stack paths)|labels|does not exist/,
+      );
     }
     const containers = (await t.call('GET', '/api/v1/containers', undefined, t.admin)).body as {
       name: string;

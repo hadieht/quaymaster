@@ -22,9 +22,8 @@ services:
     volumes:
       - quaymaster-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
-      # Stack directories at the IDENTICAL host path (Compose resolves relative bind mounts on the host).
-      # Read-write is required for Compose-based updates; add :ro for monitoring only. Must match QM_STACK_PATHS.
-      - ${DEPLOY_STACKS_DIR:-/opt/stacks}:${DEPLOY_STACKS_DIR:-/opt/stacks}
+      # No stack directory is needed for discovery, monitoring or start/stop/restart. To enable updates and
+      # redeploys, mount stack directories at the IDENTICAL host path with deploy/docker-compose.stacks.yml.
       # Optional free-space checks: mount the Docker root read-only and set QM_DOCKER_ROOT_MOUNT to that path.
       #   - /var/lib/docker:/var/lib/docker:ro
     read_only: true
